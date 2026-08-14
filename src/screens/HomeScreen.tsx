@@ -29,9 +29,12 @@ import {
   formatClock,
   formatDuration,
   formatMoney,
+  formatMonth,
   lessonAmountCents,
+  monthBounds,
   nextStep,
   occurrencesOn,
+  summarizeLessons,
 } from '../models';
 import { useSettings } from '../SettingsContext';
 import { Palette, Urgency, useTheme } from '../theme';
@@ -47,6 +50,14 @@ interface QueueItem {
   invoice: InvoiceWithStudent;
   step: Step;
 }
+
+const monthLineText = (
+  m: { n: number; minutes: number; cents: number },
+  nowMs: number,
+  sym: string,
+): string =>
+  `${formatMonth(nowMs)}: ${m.n} lesson${m.n === 1 ? '' : 's'} · ` +
+  `${formatDuration(m.minutes)} taught · ${formatMoney(m.cents, sym)} earned`;
 
 const dayBounds = (nowMs: number): [number, number] => {
   const d = new Date(nowMs);
@@ -73,6 +84,9 @@ export default function HomeScreen({
   const [todayLessons, setTodayLessons] = useState(() =>
     listLessonsBetween(bounds[0], bounds[1]),
   );
+  const [monthLessons, setMonthLessons] = useState(() =>
+    listLessonsBetween(...monthBounds(now)),
+  );
   const [unbilled, setUnbilled] = useState(() => unbilledTotals());
   const [collapsed, setCollapsed] = useState<Set<Urgency>>(() => new Set(['later']));
   const [showSettled, setShowSettled] = useState(false);
@@ -86,6 +100,7 @@ export default function HomeScreen({
   const reload = useCallback(() => {
     setOpen(listOpenInvoices());
     setTodayLessons(listLessonsBetween(bounds[0], bounds[1]));
+    setMonthLessons(listLessonsBetween(...monthBounds(Date.now())));
     setUnbilled(unbilledTotals());
   }, [bounds]);
 
@@ -156,6 +171,7 @@ export default function HomeScreen({
     if (step) queue.push({ invoice: inv, step });
   }
 
+  const month = summarizeLessons(monthLessons);
   const buckets = bucketInvoices(open, now);
   const invoicedCents = open.reduce((sum, i) => sum + i.amountCents, 0);
   let unbilledSum = 0;
@@ -191,6 +207,9 @@ export default function HomeScreen({
           {formatMoney(invoicedCents, sym)} invoiced · {formatMoney(unbilledSum, sym)}{' '}
           unbilled lessons
         </Text>
+        {month.n > 0 && (
+          <Text style={styles.monthLine}>{monthLineText(month, now, sym)}</Text>
+        )}
       </View>
 
       {today.length > 0 && (
@@ -387,6 +406,15 @@ const makeStyles = (c: Palette) =>
     },
     totalLabel: { fontSize: 12, color: c.textMuted, textTransform: 'uppercase' },
     totalValue: { fontSize: 28, fontWeight: '700', color: c.textPrimary, marginTop: 2 },
+    monthLine: {
+      fontSize: 13,
+      color: c.textBody,
+      fontWeight: '500',
+      marginTop: 8,
+      paddingTop: 8,
+      borderTopWidth: 1,
+      borderTopColor: c.hairline,
+    },
     todayRow: {
       flexDirection: 'row',
       alignItems: 'center',

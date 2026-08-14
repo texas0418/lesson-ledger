@@ -201,6 +201,21 @@ export const WEEKDAYS_LONG = [
   'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
 ] as const;
 
+/** [start, end) of the local calendar month containing nowMs. */
+export function monthBounds(nowMs: number): [number, number] {
+  const d = new Date(nowMs);
+  return [
+    new Date(d.getFullYear(), d.getMonth(), 1).getTime(),
+    new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime(),
+  ];
+}
+
+/** "Aug 2026" — the month-summary label. */
+export function formatMonth(ms: number): string {
+  const d = new Date(ms);
+  return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 /** Local noon today — the anchor for new issued dates. */
 export function todayNoonMs(nowMs: number): number {
   const d = new Date(nowMs);
@@ -344,6 +359,27 @@ export function bucketInvoices<T extends { dueMs: number }>(
 }
 
 // ------------------------------------------------------------------ totals
+
+export interface LessonSummary {
+  n: number; // taught lessons
+  minutes: number;
+  cents: number; // earned (billed or not; skipped lessons excluded)
+}
+
+/** Hours-and-earnings rollup over taught lessons. Cancelled rows don't count. */
+export const summarizeLessons = (
+  lessons: Pick<Lesson, 'status' | 'durationMin' | 'amountCents'>[],
+): LessonSummary =>
+  lessons
+    .filter((l) => l.status === 'completed')
+    .reduce(
+      (acc, l) => ({
+        n: acc.n + 1,
+        minutes: acc.minutes + l.durationMin,
+        cents: acc.cents + l.amountCents,
+      }),
+      { n: 0, minutes: 0, cents: 0 },
+    );
 
 /** Sum of logged, completed, not-yet-invoiced lessons. */
 export const unbilledCents = (

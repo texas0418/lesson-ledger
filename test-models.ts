@@ -17,14 +17,17 @@ import {
   formatDayShort,
   formatDuration,
   formatMoney,
+  formatMonth,
   formatYmd,
   isInvoiceStatus,
   isLessonStatus,
   isStepKey,
   lessonAmountCents,
+  monthBounds,
   nextStep,
   occurrencesOn,
   overdueCents,
+  summarizeLessons,
   parseClock,
   parseMoneyToCents,
   parseYmd,
@@ -175,6 +178,23 @@ eq('overdue sums past-due open only',
   10000);
 eq('shorthand overdue', dueShorthand(noon(2026, 6, 12), NOW), '7d overdue');
 eq('shorthand today', dueShorthand(noon(2026, 6, 19), NOW), 'due today');
+
+// ---- month summary ----
+const [mStart, mEnd] = monthBounds(noon(2026, 6, 19));
+eq('month starts on the 1st', formatYmd(mStart), '2026-07-01');
+eq('month end is next 1st', formatYmd(mEnd), '2026-08-01');
+eq('bounds are half-open', mEnd > noon(2026, 6, 31) && mStart <= noon(2026, 6, 1), true);
+eq('formatMonth', formatMonth(noon(2026, 6, 19)), 'Jul 2026');
+eq('december rolls the year', formatYmd(monthBounds(noon(2026, 11, 15))[1]), '2027-01-01');
+
+eq('summarize counts taught only',
+  summarizeLessons([
+    { status: 'completed', durationMin: 60, amountCents: 5000 },
+    { status: 'completed', durationMin: 90, amountCents: 7500 },
+    { status: 'cancelled', durationMin: 60, amountCents: 0 },
+  ]),
+  { n: 2, minutes: 150, cents: 12500 });
+eq('summarize empty', summarizeLessons([]), { n: 0, minutes: 0, cents: 0 });
 
 // ---- guards ----
 eq('isInvoiceStatus accepts', isInvoiceStatus('written_off'), true);
