@@ -10,11 +10,10 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { ChromeText, Text, TextInput } from '../ui';
 import { exportBackup, pickBackup } from '../backup';
 import { replaceAll } from '../db';
 import { formatMoney, parseMoneyToCents } from '../models';
@@ -125,9 +124,9 @@ export default function SettingsScreen({ onBack }: Props) {
       <StatusBar style={statusBarStyle} />
       <View style={styles.topBar}>
         <Pressable onPress={onBack} hitSlop={8}>
-          <Text style={styles.topLink}>‹ Back</Text>
+          <ChromeText style={styles.topLink}>‹ Back</ChromeText>
         </Pressable>
-        <Text style={styles.title}>Settings</Text>
+        <ChromeText style={styles.title}>Settings</ChromeText>
         <View style={{ width: 44 }} />
       </View>
 
@@ -213,7 +212,7 @@ export default function SettingsScreen({ onBack }: Props) {
                 style={[styles.chip, on && styles.chipOn]}
                 onPress={() => update({ themeMode: mode })}
               >
-                <Text style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
+                <ChromeText style={[styles.chipText, on && styles.chipTextOn]}>{label}</ChromeText>
               </Pressable>
             );
           })}

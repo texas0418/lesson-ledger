@@ -5,16 +5,9 @@
 // component, sharing one style sheet.
 
 import { useMemo, useState } from 'react';
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { ChromeText, DayPicker, Text, TextInput } from '../ui';
 import {
   createInvoiceFromLessons,
   createLesson,
@@ -38,6 +31,7 @@ import {
   WEEKDAYS,
   addDays,
   dueShorthand,
+  formatDayLong,
   formatDayShort,
   formatDuration,
   formatMoney,
@@ -47,7 +41,6 @@ import {
   monthBounds,
   parseClock,
   parseMoneyToCents,
-  parseYmd,
   slotLabel,
   summarizeLessons,
   todayNoonMs,
@@ -265,34 +258,40 @@ function ScheduleCard(props: {
               style={[styles.chip, on && { backgroundColor: props.accent, borderColor: props.accent }]}
               onPress={() => setWeekday(on ? null : i)}
             >
-              <Text style={[styles.chipText, on && { color: props.accentText, fontWeight: '500' }]}>
+              <ChromeText style={[styles.chipText, on && { color: props.accentText, fontWeight: '500' }]}>
                 {label}
-              </Text>
+              </ChromeText>
             </Pressable>
           );
         })}
       </View>
       <View style={styles.btnRow}>
-        <TextInput
-          style={[styles.numInput, styles.grow]}
-          placeholder="3:30 pm"
-          placeholderTextColor={props.muted}
-          value={timeText}
-          onChangeText={setTimeText}
-        />
-        <TextInput
-          style={styles.numInput}
-          placeholder="60"
-          placeholderTextColor={props.muted}
-          value={durText}
-          onChangeText={setDurText}
-          keyboardType="number-pad"
-        />
-        <Pressable style={styles.primaryBtnTight} onPress={addSlot}>
+        <View style={styles.col}>
+          <Text style={styles.fieldLabel}>Start time</Text>
+          <TextInput
+            style={[styles.numInput, styles.fullWidth]}
+            placeholder="3:30 pm"
+            placeholderTextColor={props.muted}
+            value={timeText}
+            onChangeText={setTimeText}
+          />
+        </View>
+        <View style={styles.col}>
+          <Text style={styles.fieldLabel}>Minutes</Text>
+          <TextInput
+            style={[styles.numInput, styles.fullWidth]}
+            placeholder="60"
+            placeholderTextColor={props.muted}
+            value={durText}
+            onChangeText={setDurText}
+            keyboardType="number-pad"
+          />
+        </View>
+        <Pressable style={[styles.primaryBtnTight, styles.rowEnd]} onPress={addSlot}>
           <Text style={styles.primaryBtnText}>Add</Text>
         </Pressable>
       </View>
-      <Text style={styles.hint}>Day, start time, minutes.</Text>
+      <Text style={styles.hint}>Pick the day above, then start time and length.</Text>
     </View>
   );
 }
@@ -303,6 +302,7 @@ function UnbilledCard(props: {
   student: Student;
   styles: Styles;
   muted: string;
+  palette: Palette;
   sym: string;
   termsDays: number;
   onOpenInvoice: (invoiceId: number) => void;
@@ -312,7 +312,8 @@ function UnbilledCard(props: {
     listUnbilledByStudent(student.id!),
   );
   const [showLog, setShowLog] = useState(false);
-  const [dateText, setDateText] = useState(() => formatYmd(Date.now()));
+  const [dateMs, setDateMs] = useState(() => todayNoonMs(Date.now()));
+  const [showCal, setShowCal] = useState(false);
   const [durText, setDurText] = useState('60');
   const [amountText, setAmountText] = useState('');
   const [noteText, setNoteText] = useState('');
@@ -323,11 +324,7 @@ function UnbilledCard(props: {
   const autoAmount = lessonAmountCents(student.rateCents, durationMin);
 
   const logLesson = () => {
-    const startMs = parseYmd(dateText);
-    if (startMs == null) {
-      Alert.alert('Check the date', 'Dates look like 2026-08-14.');
-      return;
-    }
+    const startMs = dateMs;
     if (!(durationMin > 0 && durationMin <= 12 * 60)) {
       Alert.alert('Check the duration', 'Duration is in minutes, e.g. 60.');
       return;
@@ -420,35 +417,55 @@ function UnbilledCard(props: {
 
       {showLog ? (
         <>
+          <Text style={styles.fieldLabel}>Date</Text>
+          <Pressable
+            style={styles.dateField}
+            onPress={() => setShowCal((s) => !s)}
+          >
+            <Text style={styles.dateFieldText}>{formatDayLong(dateMs)}</Text>
+            <Text style={styles.caretSmall}>{showCal ? '▴' : '▾'}</Text>
+          </Pressable>
+          {showCal && (
+            <DayPicker
+              valueMs={dateMs}
+              onChange={(ms) => {
+                setDateMs(ms);
+                setShowCal(false);
+              }}
+              palette={props.palette}
+            />
+          )}
           <View style={styles.btnRow}>
-            <TextInput
-              style={[styles.numInput, styles.grow]}
-              placeholder="2026-08-14"
-              placeholderTextColor={props.muted}
-              value={dateText}
-              onChangeText={setDateText}
-            />
-            <TextInput
-              style={styles.numInput}
-              placeholder="60"
-              placeholderTextColor={props.muted}
-              value={durText}
-              onChangeText={setDurText}
-              keyboardType="number-pad"
-            />
-            <TextInput
-              style={styles.numInput}
-              placeholder={(autoAmount / 100).toFixed(2)}
-              placeholderTextColor={props.muted}
-              value={amountText}
-              onChangeText={setAmountText}
-              keyboardType="decimal-pad"
-            />
+            <View style={styles.col}>
+              <Text style={styles.fieldLabel}>Minutes</Text>
+              <TextInput
+                style={[styles.numInput, styles.fullWidth]}
+                placeholder="60"
+                placeholderTextColor={props.muted}
+                value={durText}
+                onChangeText={setDurText}
+                keyboardType="number-pad"
+              />
+            </View>
+            <View style={styles.col}>
+              <Text style={styles.fieldLabel}>Charge ({sym})</Text>
+              <TextInput
+                style={[styles.numInput, styles.fullWidth]}
+                placeholder={(autoAmount / 100).toFixed(2)}
+                placeholderTextColor={props.muted}
+                value={amountText}
+                onChangeText={setAmountText}
+                keyboardType="decimal-pad"
+              />
+            </View>
           </View>
-          <Text style={styles.hint}>Date, minutes, amount (blank = rate × time).</Text>
+          <Text style={styles.hint}>
+            Charge left blank = hourly rate × minutes.
+          </Text>
+          <Text style={styles.fieldLabel}>Note (prints on the invoice)</Text>
           <TextInput
             style={styles.input}
-            placeholder="Note — prints on the invoice (optional)"
+            placeholder="Optional — e.g. exam prep"
             placeholderTextColor={props.muted}
             value={noteText}
             onChangeText={setNoteText}
@@ -615,11 +632,11 @@ export default function StudentScreen({ studentId, onBack, onOpenInvoice }: Prop
       <StatusBar style={statusBarStyle} />
       <View style={styles.topBar}>
         <Pressable onPress={onBack} hitSlop={8}>
-          <Text style={styles.topLink}>‹ Back</Text>
+          <ChromeText style={styles.topLink}>‹ Back</ChromeText>
         </Pressable>
-        <Text style={styles.title} numberOfLines={1}>
+        <ChromeText style={styles.title} numberOfLines={1}>
           {student.name}
-        </Text>
+        </ChromeText>
         <View style={{ width: 44 }} />
       </View>
 
@@ -627,6 +644,7 @@ export default function StudentScreen({ studentId, onBack, onOpenInvoice }: Prop
         student={student}
         styles={styles}
         muted={c.textMuted}
+        palette={c}
         sym={settings.currencySymbol}
         termsDays={settings.defaultTermsDays}
         onOpenInvoice={onOpenInvoice}
@@ -719,6 +737,28 @@ const makeStyles = (c: Palette) =>
       textAlign: 'right',
     },
     grow: { flex: 1, textAlign: 'left' },
+    col: { flex: 1 },
+    rowEnd: { alignSelf: 'flex-end' },
+    fullWidth: { width: '100%', textAlign: 'left' },
+    fieldLabel: {
+      fontSize: 12,
+      color: c.textMuted,
+      marginTop: 10,
+      marginBottom: 4,
+    },
+    dateField: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: c.bg,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: c.cardBorder,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    dateFieldText: { fontSize: 15, color: c.textPrimary },
+    caretSmall: { fontSize: 12, color: c.textMuted },
     rowBetween: {
       flexDirection: 'row',
       alignItems: 'center',

@@ -6,8 +6,9 @@
 // for reassurance.
 
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { ChromeText, Text } from '../ui';
 import {
   InvoiceWithStudent,
   createLesson,
@@ -107,15 +108,15 @@ function WeekSection(props: {
               style={[styles.stripChip, on && styles.stripChipOn]}
               onPress={() => props.onSelect(i)}
             >
-              <Text style={[styles.stripDay, on && styles.stripTextOn]}>
+              <ChromeText style={[styles.stripDay, on && styles.stripTextOn]}>
                 {WEEKDAYS[wd.getDay()]}
-              </Text>
-              <Text style={[styles.stripDate, on && styles.stripTextOn]}>
+              </ChromeText>
+              <ChromeText style={[styles.stripDate, on && styles.stripTextOn]}>
                 {wd.getDate()}
-              </Text>
-              <Text style={[styles.stripCount, on && styles.stripTextOn]}>
+              </ChromeText>
+              <ChromeText style={[styles.stripCount, on && styles.stripTextOn]}>
                 {d.occs.length > 0 ? d.occs.length : '·'}
-              </Text>
+              </ChromeText>
             </Pressable>
           );
         })}
@@ -303,13 +304,15 @@ export default function HomeScreen({
     <ScrollView style={styles.root} contentContainerStyle={styles.scroll}>
       <StatusBar style={statusBarStyle} />
       <View style={styles.topBar}>
-        <Text style={styles.appName}>Lesson Ledger</Text>
+        <ChromeText style={styles.appName} numberOfLines={1}>
+          Lesson Ledger
+        </ChromeText>
         <View style={styles.topActions}>
           <Pressable onPress={onStudents} hitSlop={8}>
-            <Text style={styles.topLink}>Students</Text>
+            <ChromeText style={styles.topLink}>Students</ChromeText>
           </Pressable>
           <Pressable onPress={onSettings} hitSlop={8}>
-            <Text style={styles.topLink}>Settings</Text>
+            <ChromeText style={styles.topLink}>Settings</ChromeText>
           </Pressable>
         </View>
       </View>
@@ -467,7 +470,7 @@ const makeStyles = (c: Palette) =>
       paddingTop: 64,
       paddingBottom: 12,
     },
-    appName: { fontSize: 22, fontWeight: '700', color: c.textPrimary },
+    appName: { fontSize: 22, fontWeight: '700', color: c.textPrimary, flexShrink: 1, marginRight: 8 },
     topActions: { flexDirection: 'row', gap: 16 },
     topLink: { color: c.accent, fontSize: 14, fontWeight: '500' },
     totalCard: {

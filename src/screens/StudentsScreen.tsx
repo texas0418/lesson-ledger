@@ -4,16 +4,9 @@
 // is free with everything included; the second prompts the subscription.
 
 import { useMemo, useState } from 'react';
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { ChromeText, Text, TextInput } from '../ui';
 import {
   countActiveStudents,
   createStudent,
@@ -88,9 +81,9 @@ export default function StudentsScreen({ onBack, onOpenStudent }: Props) {
       <StatusBar style={statusBarStyle} />
       <View style={styles.topBar}>
         <Pressable onPress={onBack} hitSlop={8}>
-          <Text style={styles.topLink}>‹ Back</Text>
+          <ChromeText style={styles.topLink}>‹ Back</ChromeText>
         </Pressable>
-        <Text style={styles.title}>Students</Text>
+        <ChromeText style={styles.title}>Students</ChromeText>
         <View style={{ width: 44 }} />
       </View>
 
