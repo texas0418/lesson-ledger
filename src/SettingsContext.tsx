@@ -24,6 +24,7 @@ export interface Settings {
   currencySymbol: string; // '$', '€', 'kr ', …
   defaultRateCents: number; // per hour; prefills new students
   defaultTermsDays: number; // new invoices: due = issued + this
+  paymentInstructions: string; // "Zelle: …" — prints on every invoice PDF
   themeMode: ThemeMode; // resolved by useTheme(); 'system' follows the OS
 }
 
@@ -33,6 +34,7 @@ const DEFAULTS: Settings = {
   currencySymbol: '$',
   defaultRateCents: 5000,
   defaultTermsDays: 14,
+  paymentInstructions: '',
   themeMode: 'system',
 };
 

@@ -315,6 +315,7 @@ function UnbilledCard(props: {
   const [dateText, setDateText] = useState(() => formatYmd(Date.now()));
   const [durText, setDurText] = useState('60');
   const [amountText, setAmountText] = useState('');
+  const [noteText, setNoteText] = useState('');
 
   const reload = () => setLessons(listUnbilledByStudent(student.id!));
 
@@ -346,10 +347,11 @@ function UnbilledCard(props: {
       amountCents: amount,
       status: 'completed',
       invoiceId: null,
-      notes: '',
+      notes: noteText.trim(),
     });
     setShowLog(false);
     setAmountText('');
+    setNoteText('');
     reload();
   };
 
@@ -402,7 +404,10 @@ function UnbilledCard(props: {
       )}
       {lessons.map((l) => (
         <Pressable key={l.id} style={styles.lessonRow} onLongPress={() => removeLesson(l)}>
-          <Text style={styles.lessonDate}>{formatDayShort(l.startMs)}</Text>
+          <Text style={styles.lessonDate} numberOfLines={1}>
+            {formatDayShort(l.startMs)}
+            {l.notes ? ` · ${l.notes}` : ''}
+          </Text>
           <Text style={styles.lessonDur}>{formatDuration(l.durationMin)}</Text>
           <Text style={styles.lessonAmount}>{formatMoney(l.amountCents, sym)}</Text>
         </Pressable>
@@ -441,6 +446,13 @@ function UnbilledCard(props: {
             />
           </View>
           <Text style={styles.hint}>Date, minutes, amount (blank = rate × time).</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Note — prints on the invoice (optional)"
+            placeholderTextColor={props.muted}
+            value={noteText}
+            onChangeText={setNoteText}
+          />
           <View style={styles.btnRow}>
             <Pressable style={styles.primaryBtnTight} onPress={logLesson}>
               <Text style={styles.primaryBtnText}>Log lesson</Text>
@@ -568,7 +580,10 @@ function InvoicesCard(props: {
               : STATUS_LABELS[inv.status].toLowerCase()}
           </Text>
           <Text style={styles.lessonAmount}>
-            {formatMoney(inv.amountCents, props.sym)}
+            {formatMoney(
+              inv.status === 'open' ? inv.balanceCents : inv.amountCents,
+              props.sym,
+            )}
           </Text>
         </Pressable>
       ))}

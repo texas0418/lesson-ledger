@@ -125,18 +125,25 @@ export function renderReminder(
 }
 
 /** The friendly note that accompanies a freshly issued invoice (the PDF rides
- *  the share sheet; this text is the email body around it). */
-export function renderInvoiceCover(ctx: MessageContext): ReminderMessage {
+ *  the share sheet; this text is the email body around it). A non-empty
+ *  paymentInstructions block gets its own "How to pay" section. */
+export function renderInvoiceCover(
+  ctx: MessageContext,
+  paymentInstructions = '',
+): ReminderMessage {
   const numTag = ctx.invoiceNumber.trim() ? ` ${ctx.invoiceNumber.trim()}` : '';
   const sig = signature(ctx);
   const signOff = sig ? `\n${sig}` : '';
+  const howToPay = paymentInstructions.trim()
+    ? `\n\nHow to pay:\n${paymentInstructions.trim()}`
+    : '';
   return {
     subject: `Invoice${numTag} — ${lessonsRef(ctx)}`,
     body:
       `${greeting(ctx)}\n\n` +
       `Please find attached invoice${numTag} for ${lessonsRef(ctx)}, ` +
       `${ctx.amountText}, due ${ctx.dueDateText}. Let me know if you have any ` +
-      `questions — and thank you!\n\n` +
+      `questions — and thank you!${howToPay}\n\n` +
       `Best,${signOff}`,
   };
 }

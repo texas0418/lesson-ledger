@@ -76,6 +76,17 @@ export interface Invoice {
   notes: string;
 }
 
+/** Money received against an invoice. An invoice can collect several of
+ *  these ("here's $100 of the $250"); it reads as paid once the sum covers
+ *  the derived amount. */
+export interface Payment {
+  id?: number;
+  invoiceId: number;
+  amountCents: number;
+  paidMs: number;
+  notes: string;
+}
+
 /** One reminder actually sent (or logged as sent) for an invoice. */
 export interface Reminder {
   id?: number;
