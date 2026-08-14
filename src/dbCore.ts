@@ -8,7 +8,7 @@
 // invoices. An invoice's amount is always derived from its lessons — no
 // denormalized total to drift.
 
-import type { Invoice, Lesson, Reminder, Slot, Student } from './models';
+import type { Invoice, Lesson, Payment, Reminder, Slot, Student } from './models';
 import { isInvoiceStatus, isLessonStatus, isStepKey } from './models';
 
 /** Each entry is the batch of statements that upgrades user_version N-1 -> N.
@@ -67,6 +67,17 @@ export const MIGRATIONS: string[][] = [
     `CREATE INDEX IF NOT EXISTS idx_lessons_start ON lessons(start_ms)`,
     `CREATE INDEX IF NOT EXISTS idx_reminders_invoice ON reminders(invoice_id)`,
   ],
+  // v2: partial payments. An invoice's paid total derives from these rows.
+  [
+    `CREATE TABLE IF NOT EXISTS payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+      amount_cents INTEGER NOT NULL,
+      paid_ms INTEGER NOT NULL,
+      notes TEXT NOT NULL DEFAULT ''
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments(invoice_id)`,
+  ],
 ];
 
 export const TARGET_DB_VERSION = MIGRATIONS.length;
@@ -115,6 +126,13 @@ export interface ReminderRow {
   step: string;
   sent_ms: number;
 }
+export interface PaymentRow {
+  id: number;
+  invoice_id: number;
+  amount_cents: number;
+  paid_ms: number;
+  notes: string;
+}
 
 export const rowToStudent = (r: StudentRow): Student => ({
   id: r.id,
@@ -152,6 +170,13 @@ export const rowToLesson = (r: LessonRow): Lesson => ({
   amountCents: r.amount_cents,
   status: isLessonStatus(r.status) ? r.status : 'completed',
   invoiceId: r.invoice_id,
+  notes: r.notes,
+});
+export const rowToPayment = (r: PaymentRow): Payment => ({
+  id: r.id,
+  invoiceId: r.invoice_id,
+  amountCents: r.amount_cents,
+  paidMs: r.paid_ms,
   notes: r.notes,
 });
 export const rowToReminder = (r: ReminderRow): Reminder => ({
@@ -206,6 +231,14 @@ export const reminderToParams = (r: Reminder): [number, string, number] => [
   r.step,
   r.sentMs,
 ];
+export const paymentToParams = (
+  p: Payment,
+): [number, number, number, string] => [
+  p.invoiceId,
+  p.amountCents,
+  p.paidMs,
+  p.notes,
+];
 
 // ---------------------------------------------------------------- students
 export const INSERT_STUDENT_SQL = `INSERT INTO students (name, payer_name, email, rate_cents, notes, archived, created_ms) VALUES (?, ?, ?, ?, ?, ?, ?)`;
@@ -228,23 +261,26 @@ export const LIST_ACTIVE_SLOTS_SQL = `SELECT s.* FROM slots s
 // ---------------------------------------------------------------- invoices
 /** Derived amount: the sum of this invoice's lessons. */
 const AMOUNT_SUB = `(SELECT COALESCE(SUM(l.amount_cents), 0) FROM lessons l WHERE l.invoice_id = i.id)`;
+/** Derived paid total: the sum of this invoice's payments. */
+const PAID_SUB = `(SELECT COALESCE(SUM(p.amount_cents), 0) FROM payments p WHERE p.invoice_id = i.id)`;
+const DERIVED = `${AMOUNT_SUB} AS amount_cents, ${PAID_SUB} AS paid_cents`;
 
 export const INSERT_INVOICE_SQL = `INSERT INTO invoices (student_id, number, issued_ms, due_ms, status, paid_ms, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`;
 export const UPDATE_INVOICE_SQL = `UPDATE invoices SET student_id = ?, number = ?, issued_ms = ?, due_ms = ?, status = ?, paid_ms = ?, notes = ? WHERE id = ?`;
 export const SET_INVOICE_STATUS_SQL = `UPDATE invoices SET status = ?, paid_ms = ? WHERE id = ?`;
 export const DELETE_INVOICE_SQL = `DELETE FROM invoices WHERE id = ?`;
-export const GET_INVOICE_SQL = `SELECT i.*, ${AMOUNT_SUB} AS amount_cents FROM invoices i WHERE i.id = ?`;
-export const LIST_INVOICES_BY_STUDENT_SQL = `SELECT i.*, ${AMOUNT_SUB} AS amount_cents
+export const GET_INVOICE_SQL = `SELECT i.*, ${DERIVED} FROM invoices i WHERE i.id = ?`;
+export const LIST_INVOICES_BY_STUDENT_SQL = `SELECT i.*, ${DERIVED}
   FROM invoices i WHERE i.student_id = ? ORDER BY i.due_ms DESC, i.id DESC`;
 
-/** Open invoices with student + derived amount — the home screen in one query. */
-export const LIST_OPEN_INVOICES_SQL = `SELECT i.*, ${AMOUNT_SUB} AS amount_cents,
+/** Open invoices with student + derived amounts — the home screen in one query. */
+export const LIST_OPEN_INVOICES_SQL = `SELECT i.*, ${DERIVED},
   st.name AS student_name, st.payer_name AS student_payer_name, st.email AS student_email
   FROM invoices i JOIN students st ON st.id = i.student_id
   WHERE i.status = 'open' ORDER BY i.due_ms, i.id`;
 
 /** Recently settled invoices (paid or written off), newest settlement first. */
-export const LIST_SETTLED_INVOICES_SQL = `SELECT i.*, ${AMOUNT_SUB} AS amount_cents,
+export const LIST_SETTLED_INVOICES_SQL = `SELECT i.*, ${DERIVED},
   st.name AS student_name, st.payer_name AS student_payer_name, st.email AS student_email
   FROM invoices i JOIN students st ON st.id = i.student_id
   WHERE i.status != 'open'
@@ -252,6 +288,7 @@ export const LIST_SETTLED_INVOICES_SQL = `SELECT i.*, ${AMOUNT_SUB} AS amount_ce
 
 export interface InvoiceAmountRow extends InvoiceRow {
   amount_cents: number;
+  paid_cents: number;
 }
 export interface InvoiceWithStudentRow extends InvoiceAmountRow {
   student_name: string;
@@ -294,6 +331,11 @@ export interface UnbilledTotalRow {
   n: number;
 }
 
+// ---------------------------------------------------------------- payments
+export const INSERT_PAYMENT_SQL = `INSERT INTO payments (invoice_id, amount_cents, paid_ms, notes) VALUES (?, ?, ?, ?)`;
+export const DELETE_PAYMENT_SQL = `DELETE FROM payments WHERE id = ?`;
+export const LIST_PAYMENTS_SQL = `SELECT * FROM payments WHERE invoice_id = ? ORDER BY paid_ms, id`;
+
 // --------------------------------------------------------------- reminders
 export const INSERT_REMINDER_SQL = `INSERT INTO reminders (invoice_id, step, sent_ms) VALUES (?, ?, ?)`;
 export const DELETE_REMINDER_SQL = `DELETE FROM reminders WHERE id = ?`;
@@ -312,6 +354,7 @@ export const ALL_SLOTS_SQL = `SELECT * FROM slots ORDER BY id`;
 export const ALL_INVOICES_SQL = `SELECT * FROM invoices ORDER BY id`;
 export const ALL_LESSONS_SQL = `SELECT * FROM lessons ORDER BY id`;
 export const ALL_REMINDERS_SQL = `SELECT * FROM reminders ORDER BY id`;
+export const ALL_PAYMENTS_SQL = `SELECT * FROM payments ORDER BY id`;
 export const DELETE_ALL_STUDENTS_SQL = `DELETE FROM students`; // cascades everything
 
 // Restore keeps original ids so cross-table references survive round-trip.
@@ -322,3 +365,4 @@ export const RESTORE_SLOT_SQL = `INSERT INTO slots (id, student_id, weekday, sta
 export const RESTORE_INVOICE_SQL = `INSERT INTO invoices (id, student_id, number, issued_ms, due_ms, status, paid_ms, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
 export const RESTORE_LESSON_SQL = `INSERT INTO lessons (id, student_id, slot_id, start_ms, duration_min, amount_cents, status, invoice_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 export const RESTORE_REMINDER_SQL = `INSERT INTO reminders (id, invoice_id, step, sent_ms) VALUES (?, ?, ?, ?)`;
+export const RESTORE_PAYMENT_SQL = `INSERT INTO payments (id, invoice_id, amount_cents, paid_ms, notes) VALUES (?, ?, ?, ?, ?)`;

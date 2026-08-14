@@ -19,17 +19,21 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import {
   InvoiceWithAmount,
+  addPayment,
   addReminder,
   deleteInvoice,
+  deletePayment,
   deleteReminder,
   getInvoice,
   getStudent,
   listLessonsByInvoice,
+  listPayments,
   listReminders,
   setInvoiceStatus,
   updateInvoice,
 } from '../db';
 import {
+  Payment,
   STEPS,
   StepKey,
   Student,
@@ -42,6 +46,7 @@ import {
   formatMoney,
   formatYmd,
   nextStep,
+  parseMoneyToCents,
   parseYmd,
   payerDisplayName,
   stepIndex,
@@ -59,6 +64,73 @@ interface Props {
 
 const TERM_CHIPS = [7, 14, 30] as const;
 
+/** Payments received against this invoice, plus the record-one row. */
+function PaymentsCard(props: {
+  payments: Payment[];
+  remainingCents: number;
+  sym: string;
+  muted: string;
+  styles: ReturnType<typeof makeStyles>;
+  onRecord: (amountCents: number) => void;
+  onRemove: (p: Payment) => void;
+}) {
+  const { styles, sym } = props;
+  const [amountText, setAmountText] = useState('');
+
+  const record = () => {
+    const cents = amountText.trim()
+      ? parseMoneyToCents(amountText)
+      : props.remainingCents;
+    if (cents == null || cents <= 0) {
+      Alert.alert('Check the amount', 'Enter a plain amount, e.g. 100 or 62.50.');
+      return;
+    }
+    setAmountText('');
+    props.onRecord(cents);
+  };
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.sectionTitle}>Payments</Text>
+      {props.payments.length === 0 && (
+        <Text style={styles.hint}>Nothing received yet.</Text>
+      )}
+      {props.payments.map((p) => (
+        <Pressable
+          key={p.id}
+          style={styles.historyRow}
+          onLongPress={() => props.onRemove(p)}
+        >
+          <Text style={styles.historyStep}>{formatMoney(p.amountCents, sym)}</Text>
+          <Text style={styles.historyDate}>{formatDayLong(p.paidMs)}</Text>
+        </Pressable>
+      ))}
+      {props.remainingCents > 0 && (
+        <View style={styles.btnRow}>
+          <TextInput
+            style={styles.numInput}
+            placeholder={(props.remainingCents / 100).toFixed(2)}
+            placeholderTextColor={props.muted}
+            value={amountText}
+            onChangeText={setAmountText}
+            keyboardType="decimal-pad"
+          />
+          <Pressable style={styles.primaryBtnTight} onPress={record}>
+            <Text style={styles.primaryBtnText}>Record payment</Text>
+          </Pressable>
+        </View>
+      )}
+      <Text style={styles.hint}>
+        {props.remainingCents > 0
+          ? 'Blank = the full remaining balance. A payment that clears the balance marks the invoice paid.'
+          : props.payments.length > 0
+            ? 'Long-press a payment to remove it.'
+            : ''}
+      </Text>
+    </View>
+  );
+}
+
 // eslint-disable-next-line max-lines-per-function, complexity -- flat screen render in the house style (Dundue precedent)
 export default function InvoiceScreen({ invoiceId, onBack }: Props) {
   const { settings } = useSettings();
@@ -73,6 +145,7 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
   );
   const [lessons] = useState(() => listLessonsByInvoice(invoiceId));
   const [reminders, setReminders] = useState(() => listReminders(invoiceId));
+  const [payments, setPayments] = useState(() => listPayments(invoiceId));
   const [busy, setBusy] = useState(false);
 
   const now = Date.now();
@@ -89,7 +162,10 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
   }
 
   const sym = settings.currencySymbol;
-  const amountText = formatMoney(invoice.amountCents, sym);
+  // Open invoices talk in the remaining balance; settled ones in the total.
+  const chaseCents =
+    invoice.status === 'open' ? invoice.balanceCents : invoice.amountCents;
+  const amountText = formatMoney(chaseCents, sym);
 
   const msgCtx: MessageContext = {
     payerName: payerDisplayName(student),
@@ -122,6 +198,8 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
           notes: l.notes,
         })),
         notes: invoice.notes,
+        paymentInstructions: settings.paymentInstructions,
+        paidCents: invoice.paidCents,
       });
     } catch (e: any) {
       Alert.alert('Could not make the PDF', String(e?.message ?? e));
@@ -131,7 +209,7 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
   };
 
   const emailCover = async () => {
-    const cover = renderInvoiceCover(msgCtx);
+    const cover = renderInvoiceCover(msgCtx, settings.paymentInstructions);
     try {
       await Linking.openURL(mailtoUrl(student.email, cover.subject, cover.body));
     } catch {
@@ -214,11 +292,59 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
 
   const setStatus = (status: InvoiceWithAmount['status']) => {
     const paidMs = status === 'paid' ? Date.now() : null;
+    // "Mark paid" with money still owed records the remainder as a payment,
+    // so the payment history always adds up to what was collected.
+    if (status === 'paid' && invoice.balanceCents > 0) {
+      addPayment({
+        invoiceId: invoice.id!,
+        amountCents: invoice.balanceCents,
+        paidMs: paidMs!,
+        notes: '',
+      });
+      setPayments(listPayments(invoice.id!));
+    }
     setInvoiceStatus(invoice.id!, status, paidMs);
-    setInvoice({ ...invoice, status, paidMs });
+    setInvoice(getInvoice(invoice.id!));
     // The win moment: an invoice got paid. One-time review ask lives here
     // and nowhere else.
     if (status === 'paid') maybeAskForReview();
+  };
+
+  const recordPayment = (amountCents: number) => {
+    addPayment({
+      invoiceId: invoice.id!,
+      amountCents,
+      paidMs: Date.now(),
+      notes: '',
+    });
+    setPayments(listPayments(invoice.id!));
+    const next = getInvoice(invoice.id!)!;
+    if (next.balanceCents <= 0 && next.status === 'open') {
+      setInvoiceStatus(next.id!, 'paid', Date.now());
+      setInvoice(getInvoice(next.id!));
+      maybeAskForReview();
+    } else {
+      setInvoice(next);
+    }
+  };
+
+  const removePayment = (p: Payment) => {
+    Alert.alert(
+      'Remove this payment?',
+      `${formatMoney(p.amountCents, sym)} received ${formatDayLong(p.paidMs)} goes back onto the balance.`,
+      [
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            deletePayment(p.id!);
+            setPayments(listPayments(invoice.id!));
+            setInvoice(getInvoice(invoice.id!));
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
   };
 
   const confirmDelete = () => {
@@ -275,6 +401,9 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
             : invoice.status === 'paid'
               ? `paid ${invoice.paidMs ? formatDayLong(invoice.paidMs) : ''}`
               : 'written off'}
+          {invoice.status === 'open' && invoice.paidCents > 0
+            ? ` · ${formatMoney(invoice.paidCents, sym)} received of ${formatMoney(invoice.amountCents, sym)}`
+            : ''}
           {invoice.status === 'open' && overdueDays > 0
             ? ` · due ${formatDayLong(invoice.dueMs)}`
             : ''}
@@ -347,7 +476,10 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
           <Text style={styles.sectionTitle}>Lessons on this invoice</Text>
           {lessons.map((l) => (
             <View key={l.id} style={styles.lessonRow}>
-              <Text style={styles.lessonDate}>{formatDayShort(l.startMs)}</Text>
+              <Text style={styles.lessonDate} numberOfLines={1}>
+                {formatDayShort(l.startMs)}
+                {l.notes ? ` · ${l.notes}` : ''}
+              </Text>
               <Text style={styles.lessonDur}>{formatDuration(l.durationMin)}</Text>
               <Text style={styles.lessonAmount}>
                 {formatMoney(l.amountCents, sym)}
@@ -400,6 +532,16 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
           <Text style={styles.primaryBtnText}>Save changes</Text>
         </Pressable>
       </View>
+
+      <PaymentsCard
+        payments={payments}
+        remainingCents={invoice.status === 'open' ? invoice.balanceCents : 0}
+        sym={sym}
+        muted={c.textMuted}
+        styles={styles}
+        onRecord={recordPayment}
+        onRemove={removePayment}
+      />
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Status</Text>

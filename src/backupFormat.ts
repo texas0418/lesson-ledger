@@ -2,14 +2,15 @@
 // Pure module (Node-testable): versioned JSON backup format.
 // Version 1: students, slots, invoices, lessons, reminders, ids included
 // (restore is replace-all, so original ids are safe to keep and cross-table
-// references survive the round-trip). Forward rule: parse must tolerate
-// missing fields by defaulting, never throw on well-formed older backups.
+// references survive the round-trip). Version 2 adds payments. Forward rule:
+// parse must tolerate missing fields by defaulting (a v1 file simply has no
+// payments), never throw on well-formed older backups.
 
-import type { Invoice, Lesson, Reminder, Slot, Student } from './models';
+import type { Invoice, Lesson, Payment, Reminder, Slot, Student } from './models';
 import { isInvoiceStatus, isLessonStatus, isStepKey } from './models';
 
 export const BACKUP_FORMAT = 'lessonledger-backup';
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2;
 
 export interface BackupV1 {
   format: typeof BACKUP_FORMAT;
@@ -20,6 +21,7 @@ export interface BackupV1 {
   invoices: Invoice[];
   lessons: Lesson[];
   reminders: Reminder[];
+  payments: Payment[];
 }
 
 export function serializeBackup(
@@ -131,6 +133,23 @@ function parseLessons(
   return out;
 }
 
+function parsePayments(raw: unknown, invoiceIds: Set<number>): Payment[] {
+  const out: Payment[] = [];
+  for (const r of Array.isArray(raw) ? raw : []) {
+    const p = asRecord(r);
+    if (!p || typeof p.id !== 'number' || !invoiceIds.has(p.invoiceId as number)) continue;
+    if (typeof p.paidMs !== 'number' || typeof p.amountCents !== 'number') continue;
+    out.push({
+      id: p.id,
+      invoiceId: p.invoiceId as number,
+      amountCents: p.amountCents,
+      paidMs: p.paidMs,
+      notes: str(p.notes, ''),
+    });
+  }
+  return out;
+}
+
 function parseReminders(raw: unknown, invoiceIds: Set<number>): Reminder[] {
   const out: Reminder[] = [];
   for (const r of Array.isArray(raw) ? raw : []) {
@@ -172,6 +191,7 @@ export function parseBackup(json: string): BackupV1 {
   const invoiceIds = new Set(invoices.map((i) => i.id!));
   const lessons = parseLessons(o.lessons, studentIds, slotIds, invoiceIds);
   const reminders = parseReminders(o.reminders, invoiceIds);
+  const payments = parsePayments(o.payments, invoiceIds);
 
   return {
     format: BACKUP_FORMAT,
@@ -182,5 +202,6 @@ export function parseBackup(json: string): BackupV1 {
     invoices,
     lessons,
     reminders,
+    payments,
   };
 }

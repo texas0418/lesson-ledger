@@ -17,14 +17,17 @@ import {
   formatDayShort,
   formatDuration,
   formatMoney,
+  formatMonth,
   formatYmd,
   isInvoiceStatus,
   isLessonStatus,
   isStepKey,
   lessonAmountCents,
+  monthBounds,
   nextStep,
   occurrencesOn,
   overdueCents,
+  summarizeLessons,
   parseClock,
   parseMoneyToCents,
   parseYmd,
@@ -176,6 +179,23 @@ eq('overdue sums past-due open only',
 eq('shorthand overdue', dueShorthand(noon(2026, 6, 12), NOW), '7d overdue');
 eq('shorthand today', dueShorthand(noon(2026, 6, 19), NOW), 'due today');
 
+// ---- month summary ----
+const [mStart, mEnd] = monthBounds(noon(2026, 6, 19));
+eq('month starts on the 1st', formatYmd(mStart), '2026-07-01');
+eq('month end is next 1st', formatYmd(mEnd), '2026-08-01');
+eq('bounds are half-open', mEnd > noon(2026, 6, 31) && mStart <= noon(2026, 6, 1), true);
+eq('formatMonth', formatMonth(noon(2026, 6, 19)), 'Jul 2026');
+eq('december rolls the year', formatYmd(monthBounds(noon(2026, 11, 15))[1]), '2027-01-01');
+
+eq('summarize counts taught only',
+  summarizeLessons([
+    { status: 'completed', durationMin: 60, amountCents: 5000 },
+    { status: 'completed', durationMin: 90, amountCents: 7500 },
+    { status: 'cancelled', durationMin: 60, amountCents: 0 },
+  ]),
+  { n: 2, minutes: 150, cents: 12500 });
+eq('summarize empty', summarizeLessons([]), { n: 0, minutes: 0, cents: 0 });
+
 // ---- guards ----
 eq('isInvoiceStatus accepts', isInvoiceStatus('written_off'), true);
 eq('isInvoiceStatus rejects', isInvoiceStatus('overdue'), false);
@@ -226,6 +246,9 @@ for (const s of STEPS) {
 const cover = renderInvoiceCover(ctx);
 eq('cover subject', cover.subject, "Invoice 20260719-3 — Maya's lessons");
 eq('cover mentions amount and due', cover.body.includes('$250.00') && cover.body.includes('Jul 19, 2026'), true);
+eq('cover omits how-to-pay when blank', cover.body.includes('How to pay'), false);
+const coverPay = renderInvoiceCover(ctx, 'Zelle: 555-1234\nVenmo: @simon');
+eq('cover carries how-to-pay', coverPay.body.includes('How to pay:\nZelle: 555-1234\nVenmo: @simon'), true);
 
 // ---- invoice HTML ----
 const lines = [
@@ -243,20 +266,33 @@ const html = renderInvoiceHtml({
   businessName: 'Shih Tutoring',
   currencySymbol: '$',
   lines,
-  notes: 'Zelle or check welcome.',
+  notes: 'Thanks for a great month.',
+  paymentInstructions: 'Zelle: 555-1234 <fast>',
+  paidCents: 0,
 });
 eq('html has total', html.includes('$125.00'), true);
 eq('html has both dates', html.includes('Jul 5, 2026') && html.includes('Aug 2, 2026'), true);
 eq('html escapes payer', html.includes('Dana &lt;Reyes&gt;'), true);
 eq('html carries line note', html.includes('exam prep'), true);
-eq('html carries invoice notes', html.includes('Zelle or check welcome.'), true);
+eq('html carries invoice notes', html.includes('Thanks for a great month.'), true);
+eq('html carries how-to-pay, escaped', html.includes('How to pay') && html.includes('Zelle: 555-1234 &lt;fast&gt;'), true);
 eq('html names the tutor', html.includes('Shih Tutoring'), true);
 // no payer: bill-to collapses to the student, no orphan "for 's lessons"
 const htmlNoPayer = renderInvoiceHtml({
   invoiceNumber: '', issuedMs: noon(2026, 6, 19), dueMs: noon(2026, 7, 2),
   studentName: 'Maya', payerName: '', yourName: '', businessName: '',
-  currencySymbol: '$', lines, notes: '',
+  currencySymbol: '$', lines, notes: '', paymentInstructions: '', paidCents: 0,
 });
+eq('blank how-to-pay hides the section', htmlNoPayer.includes('How to pay'), false);
+eq('no payments: no balance rows', htmlNoPayer.includes('Balance due'), false);
+eq('no payments: total is due', htmlNoPayer.includes('Total due'), true);
+const htmlPartial = renderInvoiceHtml({
+  invoiceNumber: '', issuedMs: noon(2026, 6, 19), dueMs: noon(2026, 7, 2),
+  studentName: 'Maya', payerName: '', yourName: '', businessName: '',
+  currencySymbol: '$', lines, notes: '', paymentInstructions: '', paidCents: 10000,
+});
+eq('partial: received row', htmlPartial.includes('Received to date') && htmlPartial.includes('−$100.00'), true);
+eq('partial: balance due', htmlPartial.includes('Balance due') && htmlPartial.includes('$25.00'), true);
 eq('no payer bills the student', htmlNoPayer.includes('Maya'), true);
 eq('no orphan possessive', htmlNoPayer.includes("for 's lessons"), false);
 eq('no number hides No. line', htmlNoPayer.includes('No.'), false);

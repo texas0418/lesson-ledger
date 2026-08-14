@@ -24,6 +24,8 @@ import {
   deleteStudent,
   getStudent,
   listInvoicesByStudent,
+  listLessonsBetween,
+  listLessonsByStudent,
   listSlotsByStudent,
   listUnbilledByStudent,
   updateStudent,
@@ -39,12 +41,15 @@ import {
   formatDayShort,
   formatDuration,
   formatMoney,
+  formatMonth,
   formatYmd,
   lessonAmountCents,
+  monthBounds,
   parseClock,
   parseMoneyToCents,
   parseYmd,
   slotLabel,
+  summarizeLessons,
   todayNoonMs,
 } from '../models';
 import { useSettings } from '../SettingsContext';
@@ -310,6 +315,7 @@ function UnbilledCard(props: {
   const [dateText, setDateText] = useState(() => formatYmd(Date.now()));
   const [durText, setDurText] = useState('60');
   const [amountText, setAmountText] = useState('');
+  const [noteText, setNoteText] = useState('');
 
   const reload = () => setLessons(listUnbilledByStudent(student.id!));
 
@@ -341,10 +347,11 @@ function UnbilledCard(props: {
       amountCents: amount,
       status: 'completed',
       invoiceId: null,
-      notes: '',
+      notes: noteText.trim(),
     });
     setShowLog(false);
     setAmountText('');
+    setNoteText('');
     reload();
   };
 
@@ -397,7 +404,10 @@ function UnbilledCard(props: {
       )}
       {lessons.map((l) => (
         <Pressable key={l.id} style={styles.lessonRow} onLongPress={() => removeLesson(l)}>
-          <Text style={styles.lessonDate}>{formatDayShort(l.startMs)}</Text>
+          <Text style={styles.lessonDate} numberOfLines={1}>
+            {formatDayShort(l.startMs)}
+            {l.notes ? ` · ${l.notes}` : ''}
+          </Text>
           <Text style={styles.lessonDur}>{formatDuration(l.durationMin)}</Text>
           <Text style={styles.lessonAmount}>{formatMoney(l.amountCents, sym)}</Text>
         </Pressable>
@@ -436,6 +446,13 @@ function UnbilledCard(props: {
             />
           </View>
           <Text style={styles.hint}>Date, minutes, amount (blank = rate × time).</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Note — prints on the invoice (optional)"
+            placeholderTextColor={props.muted}
+            value={noteText}
+            onChangeText={setNoteText}
+          />
           <View style={styles.btnRow}>
             <Pressable style={styles.primaryBtnTight} onPress={logLesson}>
               <Text style={styles.primaryBtnText}>Log lesson</Text>
@@ -462,6 +479,65 @@ function UnbilledCard(props: {
       {lessons.length > 0 && !showLog && (
         <Text style={styles.hint}>Long-press a lesson to delete it.</Text>
       )}
+    </View>
+  );
+}
+
+// ------------------------------------------------------------------ history
+
+function HistoryCard(props: {
+  studentId: number;
+  styles: Styles;
+  muted: string;
+  success: string;
+  sym: string;
+}) {
+  const { styles, sym } = props;
+  const [recent] = useState<Lesson[]>(() =>
+    listLessonsByStudent(props.studentId, 8),
+  );
+  const now = Date.now();
+  // Month rollup from the full month, not just the rows shown below.
+  const [month] = useState(() => {
+    const [mStart, mEnd] = monthBounds(now);
+    return summarizeLessons(
+      listLessonsBetween(mStart, mEnd).filter(
+        (l) => l.studentId === props.studentId,
+      ),
+    );
+  });
+
+  if (recent.length === 0) return null;
+  return (
+    <View style={styles.card}>
+      <Text style={styles.sectionTitle}>Lesson history</Text>
+      {month.n > 0 && (
+        <Text style={styles.hint}>
+          {formatMonth(now)}: {month.n} lesson{month.n === 1 ? '' : 's'} ·{' '}
+          {formatDuration(month.minutes)} · {formatMoney(month.cents, sym)}
+        </Text>
+      )}
+      {recent.map((l) => (
+        <View key={l.id} style={styles.lessonRow}>
+          <Text style={styles.lessonDate}>{formatDayShort(l.startMs)}</Text>
+          <Text
+            style={[
+              styles.lessonDur,
+              l.status === 'completed' && l.invoiceId != null && { color: props.success },
+            ]}
+          >
+            {l.status === 'cancelled'
+              ? 'skipped'
+              : l.invoiceId != null
+                ? 'billed'
+                : 'unbilled'}
+          </Text>
+          <Text style={styles.lessonDur}>{formatDuration(l.durationMin)}</Text>
+          <Text style={styles.lessonAmount}>
+            {l.status === 'cancelled' ? '—' : formatMoney(l.amountCents, sym)}
+          </Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -504,7 +580,10 @@ function InvoicesCard(props: {
               : STATUS_LABELS[inv.status].toLowerCase()}
           </Text>
           <Text style={styles.lessonAmount}>
-            {formatMoney(inv.amountCents, props.sym)}
+            {formatMoney(
+              inv.status === 'open' ? inv.balanceCents : inv.amountCents,
+              props.sym,
+            )}
           </Text>
         </Pressable>
       ))}
@@ -567,6 +646,13 @@ export default function StudentScreen({ studentId, onBack, onOpenInvoice }: Prop
         success={c.success}
         muted={c.textMuted}
         onOpenInvoice={onOpenInvoice}
+      />
+      <HistoryCard
+        studentId={studentId}
+        styles={styles}
+        muted={c.textMuted}
+        success={c.success}
+        sym={settings.currencySymbol}
       />
       <ProfileCard
         student={student}

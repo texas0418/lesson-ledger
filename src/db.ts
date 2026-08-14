@@ -4,11 +4,20 @@
 // transaction, integer epoch-ms / integer cents everywhere.
 
 import * as SQLite from 'expo-sqlite';
-import type { Invoice, Lesson, Reminder, Slot, StepKey, Student } from './models';
+import type {
+  Invoice,
+  Lesson,
+  Payment,
+  Reminder,
+  Slot,
+  StepKey,
+  Student,
+} from './models';
 import type { BackupV1 } from './backupFormat';
 import {
   ALL_INVOICES_SQL,
   ALL_LESSONS_SQL,
+  ALL_PAYMENTS_SQL,
   ALL_REMINDERS_SQL,
   ALL_SLOTS_SQL,
   ALL_STUDENTS_SQL,
@@ -17,6 +26,7 @@ import {
   DELETE_ALL_STUDENTS_SQL,
   DELETE_INVOICE_SQL,
   DELETE_LESSON_SQL,
+  DELETE_PAYMENT_SQL,
   DELETE_REMINDER_SQL,
   DELETE_SLOT_SQL,
   DELETE_STUDENT_SQL,
@@ -27,6 +37,7 @@ import {
   GET_STUDENT_SQL,
   INSERT_INVOICE_SQL,
   INSERT_LESSON_SQL,
+  INSERT_PAYMENT_SQL,
   INSERT_REMINDER_SQL,
   INSERT_SLOT_SQL,
   INSERT_STUDENT_SQL,
@@ -39,6 +50,7 @@ import {
   LIST_LESSONS_BY_STUDENT_SQL,
   LIST_OPEN_INVOICES_SQL,
   LIST_OPEN_REMINDERS_SQL,
+  LIST_PAYMENTS_SQL,
   LIST_REMINDERS_SQL,
   LIST_SETTLED_INVOICES_SQL,
   LIST_SLOTS_BY_STUDENT_SQL,
@@ -46,9 +58,11 @@ import {
   LIST_UNBILLED_BY_STUDENT_SQL,
   LessonRow,
   MIGRATIONS,
+  PaymentRow,
   ReminderRow,
   RESTORE_INVOICE_SQL,
   RESTORE_LESSON_SQL,
+  RESTORE_PAYMENT_SQL,
   RESTORE_REMINDER_SQL,
   RESTORE_SLOT_SQL,
   RESTORE_STUDENT_SQL,
@@ -62,9 +76,11 @@ import {
   UnbilledTotalRow,
   invoiceToParams,
   lessonToParams,
+  paymentToParams,
   reminderToParams,
   rowToInvoice,
   rowToLesson,
+  rowToPayment,
   rowToReminder,
   rowToSlot,
   rowToStudent,
@@ -152,7 +168,9 @@ export function listActiveSlots(): Slot[] {
 // ---------------------------------------------------------------- invoices
 
 export interface InvoiceWithAmount extends Invoice {
-  amountCents: number;
+  amountCents: number; // sum of its lessons
+  paidCents: number; // sum of its payments
+  balanceCents: number; // amount - paid, floored at 0 for display math
 }
 export interface InvoiceWithStudent extends InvoiceWithAmount {
   studentName: string;
@@ -163,6 +181,8 @@ export interface InvoiceWithStudent extends InvoiceWithAmount {
 const rowToInvoiceWithAmount = (r: InvoiceAmountRow): InvoiceWithAmount => ({
   ...rowToInvoice(r),
   amountCents: r.amount_cents,
+  paidCents: r.paid_cents,
+  balanceCents: Math.max(0, r.amount_cents - r.paid_cents),
 });
 const rowToInvoiceWithStudent = (
   r: InvoiceWithStudentRow,
@@ -296,6 +316,23 @@ export function detachLessons(invoiceId: number): void {
   getDb().runSync(DETACH_LESSONS_SQL, [invoiceId]);
 }
 
+// ---------------------------------------------------------------- payments
+
+export function addPayment(p: Payment): number {
+  const res = getDb().runSync(INSERT_PAYMENT_SQL, paymentToParams(p));
+  return Number(res.lastInsertRowId);
+}
+
+export function deletePayment(id: number): void {
+  getDb().runSync(DELETE_PAYMENT_SQL, [id]);
+}
+
+export function listPayments(invoiceId: number): Payment[] {
+  return getDb()
+    .getAllSync<PaymentRow>(LIST_PAYMENTS_SQL, [invoiceId])
+    .map(rowToPayment);
+}
+
 // --------------------------------------------------------------- reminders
 
 export function addReminder(r: Reminder): number {
@@ -338,6 +375,7 @@ export function getAllForBackup(): Omit<
     invoices: d.getAllSync<InvoiceAmountRow>(ALL_INVOICES_SQL).map(rowToInvoice),
     lessons: d.getAllSync<LessonRow>(ALL_LESSONS_SQL).map(rowToLesson),
     reminders: d.getAllSync<ReminderRow>(ALL_REMINDERS_SQL).map(rowToReminder),
+    payments: d.getAllSync<PaymentRow>(ALL_PAYMENTS_SQL).map(rowToPayment),
   };
 }
 
@@ -367,5 +405,9 @@ export function replaceAll(backup: BackupV1): void {
       ]);
     for (const r of backup.reminders)
       d.runSync(RESTORE_REMINDER_SQL, [r.id!, r.invoiceId, r.step, r.sentMs]);
+    for (const p of backup.payments)
+      d.runSync(RESTORE_PAYMENT_SQL, [
+        p.id!, p.invoiceId, p.amountCents, p.paidMs, p.notes,
+      ]);
   });
 }
