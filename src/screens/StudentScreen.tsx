@@ -592,7 +592,7 @@ function InvoicesCard(props: {
           onPress={() => props.onOpenInvoice(inv.id!)}
         >
           <Text style={styles.lessonDate} numberOfLines={1}>
-            {inv.number || formatDayShort(inv.issuedMs)}
+            issued {formatDayShort(inv.issuedMs)}
           </Text>
           <Text
             style={[
