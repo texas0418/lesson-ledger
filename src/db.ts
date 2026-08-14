@@ -30,6 +30,7 @@ import {
   DELETE_REMINDER_SQL,
   DELETE_SLOT_SQL,
   DELETE_STUDENT_SQL,
+  DETACH_LESSON_SQL,
   DETACH_LESSONS_SQL,
   ENABLE_FK_SQL,
   GET_INVOICE_SQL,
@@ -312,6 +313,16 @@ export function createInvoiceFromLessons(
 }
 
 /** Detach every lesson from an invoice (they return to unbilled). */
+/** Attach one unbilled completed lesson to an existing invoice. */
+export function attachLesson(invoiceId: number, lessonId: number): void {
+  getDb().runSync(ATTACH_LESSON_SQL, [invoiceId, lessonId]);
+}
+
+/** Detach one lesson from its invoice (it returns to unbilled). */
+export function detachLesson(lessonId: number): void {
+  getDb().runSync(DETACH_LESSON_SQL, [lessonId]);
+}
+
 export function detachLessons(invoiceId: number): void {
   getDb().runSync(DETACH_LESSONS_SQL, [invoiceId]);
 }

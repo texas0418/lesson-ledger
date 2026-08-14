@@ -12,11 +12,10 @@ import {
   ScrollView,
   Share,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { ChromeText, Text, TextInput } from '../ui';
 import {
   InvoiceWithAmount,
   addPayment,
@@ -26,7 +25,10 @@ import {
   deleteReminder,
   getInvoice,
   getStudent,
+  attachLesson,
+  detachLesson,
   listLessonsByInvoice,
+  listUnbilledByStudent,
   listPayments,
   listReminders,
   setInvoiceStatus,
@@ -143,7 +145,10 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
   const [student] = useState<Student | null>(() =>
     invoice ? getStudent(invoice.studentId) : null,
   );
-  const [lessons] = useState(() => listLessonsByInvoice(invoiceId));
+  const [lessons, setLessons] = useState(() => listLessonsByInvoice(invoiceId));
+  const [unbilled, setUnbilled] = useState(() =>
+    invoice ? listUnbilledByStudent(invoice.studentId) : [],
+  );
   const [reminders, setReminders] = useState(() => listReminders(invoiceId));
   const [payments, setPayments] = useState(() => listPayments(invoiceId));
   const [busy, setBusy] = useState(false);
@@ -347,6 +352,35 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
     );
   };
 
+  // ---- editing which lessons the invoice bills ----
+  const refreshLessons = () => {
+    setLessons(listLessonsByInvoice(invoice.id!));
+    setUnbilled(listUnbilledByStudent(invoice.studentId));
+    setInvoice(getInvoice(invoice.id!)); // the derived amount changed
+  };
+
+  const removeLessonFromInvoice = (lessonId: number, label: string) => {
+    Alert.alert(
+      'Remove from this invoice?',
+      `${label} goes back to unbilled — the invoice total updates.`,
+      [
+        {
+          text: 'Remove',
+          onPress: () => {
+            detachLesson(lessonId);
+            refreshLessons();
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  };
+
+  const addLessonToInvoice = (lessonId: number) => {
+    attachLesson(invoice.id!, lessonId);
+    refreshLessons();
+  };
+
   const confirmDelete = () => {
     Alert.alert(
       'Delete invoice?',
@@ -382,9 +416,9 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
       <StatusBar style={statusBarStyle} />
       <View style={styles.topBar}>
         <Pressable onPress={() => onBack(student.id!)} hitSlop={8}>
-          <Text style={styles.topLink}>‹ Back</Text>
+          <ChromeText style={styles.topLink}>‹ Back</ChromeText>
         </Pressable>
-        <Text style={styles.title}>Invoice</Text>
+        <ChromeText style={styles.title}>Invoice</ChromeText>
         <View style={{ width: 44 }} />
       </View>
 
@@ -471,11 +505,23 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
         </View>
       )}
 
-      {lessons.length > 0 && (
+      {(lessons.length > 0 || (invoice.status === 'open' && unbilled.length > 0)) && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Lessons on this invoice</Text>
           {lessons.map((l) => (
-            <View key={l.id} style={styles.lessonRow}>
+            <Pressable
+              key={l.id}
+              style={styles.lessonRow}
+              onLongPress={
+                invoice.status === 'open'
+                  ? () =>
+                      removeLessonFromInvoice(
+                        l.id!,
+                        `${formatDayShort(l.startMs)} · ${formatMoney(l.amountCents, sym)}`,
+                      )
+                  : undefined
+              }
+            >
               <Text style={styles.lessonDate} numberOfLines={1}>
                 {formatDayShort(l.startMs)}
                 {l.notes ? ` · ${l.notes}` : ''}
@@ -484,8 +530,35 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
               <Text style={styles.lessonAmount}>
                 {formatMoney(l.amountCents, sym)}
               </Text>
-            </View>
+            </Pressable>
           ))}
+          {invoice.status === 'open' && lessons.length > 0 && (
+            <Text style={styles.hint}>Long-press a lesson to remove it from the invoice.</Text>
+          )}
+          {invoice.status === 'open' && unbilled.length > 0 && (
+            <>
+              <Text style={styles.unbilledHead}>
+                Not on this invoice yet
+              </Text>
+              {unbilled.map((l) => (
+                <View key={l.id} style={styles.lessonRow}>
+                  <Text style={styles.lessonDate} numberOfLines={1}>
+                    {formatDayShort(l.startMs)}
+                    {l.notes ? ` · ${l.notes}` : ''}
+                  </Text>
+                  <Text style={styles.lessonDur}>
+                    {formatMoney(l.amountCents, sym)}
+                  </Text>
+                  <Pressable
+                    style={styles.addLessonBtn}
+                    onPress={() => addLessonToInvoice(l.id!)}
+                  >
+                    <ChromeText style={styles.addLessonBtnText}>+ Add</ChromeText>
+                  </Pressable>
+                </View>
+              ))}
+            </>
+          )}
         </View>
       )}
 
@@ -742,6 +815,21 @@ const makeStyles = (c: Palette) =>
       borderBottomWidth: 1,
       borderBottomColor: c.hairline,
     },
+    unbilledHead: {
+      fontSize: 12,
+      color: c.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginTop: 12,
+    },
+    addLessonBtn: {
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: c.accent,
+      paddingVertical: 4,
+      paddingHorizontal: 10,
+    },
+    addLessonBtnText: { color: c.accent, fontSize: 13, fontWeight: '600' },
     historyStep: { fontSize: 14, color: c.textPrimary, fontWeight: '500' },
     historyDate: { fontSize: 13, color: c.textMuted },
     deleteBtn: { alignItems: 'center', paddingVertical: 12, marginBottom: 8 },
