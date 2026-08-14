@@ -30,6 +30,7 @@ export interface InvoiceHtmlContext {
   currencySymbol: string;
   lines: InvoiceLine[]; // chronological
   notes: string; // free text under the table, '' hides it
+  paymentInstructions: string; // "Zelle: …" — the how-to-pay block, '' hides it
 }
 
 const esc = (s: string): string =>
@@ -92,6 +93,8 @@ export function renderInvoiceHtml(ctx: InvoiceHtmlContext): string {
   .due { margin-top: 26px; font-size: 14px; }
   .due strong { font-size: 15px; }
   .notes { margin-top: 26px; color: #444; white-space: pre-wrap; }
+  .paysec { margin-top: 26px; }
+  .payhow { margin-top: 4px; color: #111; }
   .thanks { margin-top: 40px; color: #444; }
 </style>
 </head>
@@ -127,6 +130,11 @@ export function renderInvoiceHtml(ctx: InvoiceHtmlContext): string {
   </table>
 
   <div class="due">Payment due <strong>${esc(formatDayLong(ctx.dueMs))}</strong></div>
+  ${
+    ctx.paymentInstructions.trim()
+      ? `<div class="paysec"><div class="label">How to pay</div><div class="notes payhow">${esc(ctx.paymentInstructions.trim())}</div></div>`
+      : ''
+  }
   ${ctx.notes.trim() ? `<div class="notes">${esc(ctx.notes.trim())}</div>` : ''}
   <div class="thanks">Thank you!</div>
 </body>

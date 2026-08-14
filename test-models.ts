@@ -246,6 +246,9 @@ for (const s of STEPS) {
 const cover = renderInvoiceCover(ctx);
 eq('cover subject', cover.subject, "Invoice 20260719-3 — Maya's lessons");
 eq('cover mentions amount and due', cover.body.includes('$250.00') && cover.body.includes('Jul 19, 2026'), true);
+eq('cover omits how-to-pay when blank', cover.body.includes('How to pay'), false);
+const coverPay = renderInvoiceCover(ctx, 'Zelle: 555-1234\nVenmo: @simon');
+eq('cover carries how-to-pay', coverPay.body.includes('How to pay:\nZelle: 555-1234\nVenmo: @simon'), true);
 
 // ---- invoice HTML ----
 const lines = [
@@ -263,20 +266,23 @@ const html = renderInvoiceHtml({
   businessName: 'Shih Tutoring',
   currencySymbol: '$',
   lines,
-  notes: 'Zelle or check welcome.',
+  notes: 'Thanks for a great month.',
+  paymentInstructions: 'Zelle: 555-1234 <fast>',
 });
 eq('html has total', html.includes('$125.00'), true);
 eq('html has both dates', html.includes('Jul 5, 2026') && html.includes('Aug 2, 2026'), true);
 eq('html escapes payer', html.includes('Dana &lt;Reyes&gt;'), true);
 eq('html carries line note', html.includes('exam prep'), true);
-eq('html carries invoice notes', html.includes('Zelle or check welcome.'), true);
+eq('html carries invoice notes', html.includes('Thanks for a great month.'), true);
+eq('html carries how-to-pay, escaped', html.includes('How to pay') && html.includes('Zelle: 555-1234 &lt;fast&gt;'), true);
 eq('html names the tutor', html.includes('Shih Tutoring'), true);
 // no payer: bill-to collapses to the student, no orphan "for 's lessons"
 const htmlNoPayer = renderInvoiceHtml({
   invoiceNumber: '', issuedMs: noon(2026, 6, 19), dueMs: noon(2026, 7, 2),
   studentName: 'Maya', payerName: '', yourName: '', businessName: '',
-  currencySymbol: '$', lines, notes: '',
+  currencySymbol: '$', lines, notes: '', paymentInstructions: '',
 });
+eq('blank how-to-pay hides the section', htmlNoPayer.includes('How to pay'), false);
 eq('no payer bills the student', htmlNoPayer.includes('Maya'), true);
 eq('no orphan possessive', htmlNoPayer.includes("for 's lessons"), false);
 eq('no number hides No. line', htmlNoPayer.includes('No.'), false);

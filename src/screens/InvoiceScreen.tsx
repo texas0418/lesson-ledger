@@ -122,6 +122,7 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
           notes: l.notes,
         })),
         notes: invoice.notes,
+        paymentInstructions: settings.paymentInstructions,
       });
     } catch (e: any) {
       Alert.alert('Could not make the PDF', String(e?.message ?? e));
@@ -131,7 +132,7 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
   };
 
   const emailCover = async () => {
-    const cover = renderInvoiceCover(msgCtx);
+    const cover = renderInvoiceCover(msgCtx, settings.paymentInstructions);
     try {
       await Linking.openURL(mailtoUrl(student.email, cover.subject, cover.body));
     } catch {

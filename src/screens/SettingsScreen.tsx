@@ -187,6 +187,22 @@ export default function SettingsScreen({ onBack }: Props) {
       </View>
 
       <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Getting paid</Text>
+        <Text style={styles.hint}>
+          Printed on every invoice PDF and invoice email — Zelle, Venmo, check,
+          whatever works for you.
+        </Text>
+        <TextInput
+          style={[styles.input, styles.multiline]}
+          placeholder={'Zelle: 555-123-4567\nVenmo: @yourname'}
+          placeholderTextColor={c.textMuted}
+          value={settings.paymentInstructions}
+          onChangeText={(t) => update({ paymentInstructions: t })}
+          multiline
+        />
+      </View>
+
+      <View style={styles.card}>
         <Text style={styles.sectionTitle}>Appearance</Text>
         <View style={styles.chipRow}>
           {THEME_CHOICES.map(({ mode, label }) => {
@@ -296,6 +312,7 @@ const makeStyles = (c: Palette) =>
       color: c.textPrimary,
       marginTop: 8,
     },
+    multiline: { minHeight: 64, textAlignVertical: 'top' },
     numInput: {
       backgroundColor: c.bg,
       borderRadius: 10,
