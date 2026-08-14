@@ -31,6 +31,7 @@ export interface InvoiceHtmlContext {
   lines: InvoiceLine[]; // chronological
   notes: string; // free text under the table, '' hides it
   paymentInstructions: string; // "Zelle: …" — the how-to-pay block, '' hides it
+  paidCents: number; // already received; > 0 adds Received / Balance due rows
 }
 
 const esc = (s: string): string =>
@@ -63,7 +64,20 @@ export function renderInvoiceHtml(ctx: InvoiceHtmlContext): string {
     )
     .join('');
 
-  const total = formatMoney(invoiceTotalCents(ctx.lines), sym);
+  const totalCents = invoiceTotalCents(ctx.lines);
+  const total = formatMoney(totalCents, sym);
+  const balanceRows =
+    ctx.paidCents > 0
+      ? `
+    <tr class="balrow">
+      <td colspan="3">Received to date</td>
+      <td class="num">−${esc(formatMoney(ctx.paidCents, sym))}</td>
+    </tr>
+    <tr class="totalrow">
+      <td colspan="3">Balance due</td>
+      <td class="num">${esc(formatMoney(Math.max(0, totalCents - ctx.paidCents), sym))}</td>
+    </tr>`
+      : '';
 
   return `<!DOCTYPE html>
 <html>
@@ -90,6 +104,7 @@ export function renderInvoiceHtml(ctx: InvoiceHtmlContext): string {
   td { padding: 8px 8px 8px 0; border-bottom: 1px solid #ddd; vertical-align: top; }
   .num, th.num { text-align: right; white-space: nowrap; }
   .totalrow td { border-bottom: none; padding-top: 14px; font-weight: 700; font-size: 15px; }
+  .balrow td { border-bottom: none; padding-top: 4px; color: #444; }
   .due { margin-top: 26px; font-size: 14px; }
   .due strong { font-size: 15px; }
   .notes { margin-top: 26px; color: #444; white-space: pre-wrap; }
@@ -124,9 +139,9 @@ export function renderInvoiceHtml(ctx: InvoiceHtmlContext): string {
     </tr>
     ${rows}
     <tr class="totalrow">
-      <td colspan="3">Total due</td>
+      <td colspan="3">${ctx.paidCents > 0 ? 'Total' : 'Total due'}</td>
       <td class="num">${esc(total)}</td>
-    </tr>
+    </tr>${balanceRows}
   </table>
 
   <div class="due">Payment due <strong>${esc(formatDayLong(ctx.dueMs))}</strong></div>

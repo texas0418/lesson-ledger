@@ -268,6 +268,7 @@ const html = renderInvoiceHtml({
   lines,
   notes: 'Thanks for a great month.',
   paymentInstructions: 'Zelle: 555-1234 <fast>',
+  paidCents: 0,
 });
 eq('html has total', html.includes('$125.00'), true);
 eq('html has both dates', html.includes('Jul 5, 2026') && html.includes('Aug 2, 2026'), true);
@@ -280,9 +281,18 @@ eq('html names the tutor', html.includes('Shih Tutoring'), true);
 const htmlNoPayer = renderInvoiceHtml({
   invoiceNumber: '', issuedMs: noon(2026, 6, 19), dueMs: noon(2026, 7, 2),
   studentName: 'Maya', payerName: '', yourName: '', businessName: '',
-  currencySymbol: '$', lines, notes: '', paymentInstructions: '',
+  currencySymbol: '$', lines, notes: '', paymentInstructions: '', paidCents: 0,
 });
 eq('blank how-to-pay hides the section', htmlNoPayer.includes('How to pay'), false);
+eq('no payments: no balance rows', htmlNoPayer.includes('Balance due'), false);
+eq('no payments: total is due', htmlNoPayer.includes('Total due'), true);
+const htmlPartial = renderInvoiceHtml({
+  invoiceNumber: '', issuedMs: noon(2026, 6, 19), dueMs: noon(2026, 7, 2),
+  studentName: 'Maya', payerName: '', yourName: '', businessName: '',
+  currencySymbol: '$', lines, notes: '', paymentInstructions: '', paidCents: 10000,
+});
+eq('partial: received row', htmlPartial.includes('Received to date') && htmlPartial.includes('−$100.00'), true);
+eq('partial: balance due', htmlPartial.includes('Balance due') && htmlPartial.includes('$25.00'), true);
 eq('no payer bills the student', htmlNoPayer.includes('Maya'), true);
 eq('no orphan possessive', htmlNoPayer.includes("for 's lessons"), false);
 eq('no number hides No. line', htmlNoPayer.includes('No.'), false);

@@ -3,25 +3,32 @@
 // @ts-expect-error node:sqlite has no types under Expo's tsconfig; tsx runs it fine
 import { DatabaseSync } from 'node:sqlite';
 import {
-  ALL_INVOICES_SQL, ALL_LESSONS_SQL, ALL_REMINDERS_SQL, ALL_SLOTS_SQL,
+  ALL_INVOICES_SQL, ALL_LESSONS_SQL, ALL_PAYMENTS_SQL, ALL_REMINDERS_SQL,
+  ALL_SLOTS_SQL,
   ALL_STUDENTS_SQL, ATTACH_LESSON_SQL, COUNT_ACTIVE_STUDENTS_SQL,
-  DELETE_ALL_STUDENTS_SQL, DELETE_INVOICE_SQL, DELETE_SLOT_SQL,
+  DELETE_ALL_STUDENTS_SQL, DELETE_INVOICE_SQL, DELETE_PAYMENT_SQL,
+  DELETE_SLOT_SQL,
   DELETE_STUDENT_SQL, DETACH_LESSONS_SQL, ENABLE_FK_SQL, GET_INVOICE_SQL,
   GET_STUDENT_SQL, INSERT_INVOICE_SQL, INSERT_LESSON_SQL,
+  INSERT_PAYMENT_SQL,
   INSERT_REMINDER_SQL, INSERT_SLOT_SQL, INSERT_STUDENT_SQL, InvoiceAmountRow,
   InvoiceWithStudentRow, LIST_ACTIVE_SLOTS_SQL, LIST_LESSONS_BETWEEN_SQL,
   LIST_LESSONS_BY_INVOICE_SQL, LIST_OPEN_INVOICES_SQL,
   LIST_OPEN_REMINDERS_SQL, LIST_SLOTS_BY_STUDENT_SQL, LIST_STUDENTS_SQL,
-  LIST_UNBILLED_BY_STUDENT_SQL, LessonRow, MIGRATIONS, ReminderRow,
-  RESTORE_INVOICE_SQL, RESTORE_LESSON_SQL, RESTORE_REMINDER_SQL,
+  LIST_PAYMENTS_SQL, LIST_UNBILLED_BY_STUDENT_SQL, LessonRow, MIGRATIONS,
+  PaymentRow, ReminderRow,
+  RESTORE_INVOICE_SQL, RESTORE_LESSON_SQL, RESTORE_PAYMENT_SQL,
+  RESTORE_REMINDER_SQL,
   RESTORE_SLOT_SQL, RESTORE_STUDENT_SQL, SET_INVOICE_STATUS_SQL, SlotRow,
   StudentRow, TARGET_DB_VERSION, UNBILLED_TOTALS_SQL, UnbilledTotalRow,
-  invoiceToParams, lessonToParams, reminderToParams, rowToInvoice,
-  rowToLesson, rowToReminder, rowToSlot, rowToStudent, slotToParams,
+  invoiceToParams, lessonToParams, paymentToParams, reminderToParams,
+  rowToInvoice,
+  rowToLesson, rowToPayment, rowToReminder, rowToSlot, rowToStudent,
+  slotToParams,
   studentToParams,
 } from './src/dbCore';
 import { parseBackup, serializeBackup } from './src/backupFormat';
-import type { Invoice, Lesson, Slot, Student } from './src/models';
+import type { Invoice, Lesson, Payment, Slot, Student } from './src/models';
 
 let failures = 0;
 const eq = (name: string, got: unknown, want: unknown) => {
@@ -156,6 +163,28 @@ eq('unknown step maps to due', (() => {
 })(), 'due');
 db.prepare(SET_INVOICE_STATUS_SQL).run('open', null, invId);
 
+// ---- payments: derived paid total + balance semantics ----
+const pay1: Payment = { invoiceId: invId, amountCents: 4000, paidMs: T0 + 20 * DAY, notes: 'venmo' };
+const pay1Id = Number(db.prepare(INSERT_PAYMENT_SQL).run(...paymentToParams(pay1)).lastInsertRowid);
+eq('payment round-trip',
+  rowToPayment(db.prepare(LIST_PAYMENTS_SQL).get(invId) as unknown as PaymentRow),
+  { id: pay1Id, ...pay1 });
+eq('invoice carries derived paid total',
+  (db.prepare(GET_INVOICE_SQL).get(invId) as unknown as InvoiceAmountRow).paid_cents,
+  4000);
+db.prepare(INSERT_PAYMENT_SQL).run(invId, 6000, T0 + 21 * DAY, '');
+eq('payments accumulate',
+  (db.prepare(GET_INVOICE_SQL).get(invId) as unknown as InvoiceAmountRow).paid_cents,
+  10000);
+eq('open list carries paid total',
+  (db.prepare(LIST_OPEN_INVOICES_SQL).all() as unknown as InvoiceWithStudentRow[])[0].paid_cents,
+  10000);
+db.prepare(DELETE_PAYMENT_SQL).run(pay1Id);
+eq('payment delete shrinks the total',
+  (db.prepare(GET_INVOICE_SQL).get(invId) as unknown as InvoiceAmountRow).paid_cents,
+  6000);
+db.prepare(INSERT_PAYMENT_SQL).run(invId, 4000, T0 + 22 * DAY, '');
+
 // ---- invoice delete detaches lessons (SET NULL) and cascades reminders ----
 db.prepare(DELETE_INVOICE_SQL).run(invId);
 eq('deleted invoice returns lessons to unbilled',
@@ -163,6 +192,8 @@ eq('deleted invoice returns lessons to unbilled',
   [l1, l2]);
 eq('deleted invoice cascades reminders',
   (db.prepare(ALL_REMINDERS_SQL).all() as unknown as ReminderRow[]).length, 0);
+eq('deleted invoice cascades payments',
+  (db.prepare(ALL_PAYMENTS_SQL).all() as unknown as PaymentRow[]).length, 0);
 
 // ---- detach-all (manual unbundle path) ----
 const inv2Id = Number(db.prepare(INSERT_INVOICE_SQL).run(...invoiceToParams(inv)).lastInsertRowid);
@@ -191,6 +222,7 @@ const i3 = Number(db.prepare(INSERT_INVOICE_SQL).run(s2, 'N-77', T0, T0 + 14 * D
 db.prepare(INSERT_LESSON_SQL).run(s2, sl2, T0, 90, 6750, 'completed', i3, 'trig');
 db.prepare(INSERT_LESSON_SQL).run(s2, null, T0 + DAY, 60, 4500, 'completed', null, '');
 db.prepare(INSERT_REMINDER_SQL).run(i3, 'before', T0 + 11 * DAY);
+db.prepare(INSERT_PAYMENT_SQL).run(i3, 2500, T0 + 12 * DAY, 'partial, check');
 
 const snapshot = () => ({
   students: (db.prepare(ALL_STUDENTS_SQL).all() as unknown as StudentRow[]).map(rowToStudent),
@@ -198,6 +230,7 @@ const snapshot = () => ({
   invoices: (db.prepare(ALL_INVOICES_SQL).all() as unknown as InvoiceAmountRow[]).map(rowToInvoice),
   lessons: (db.prepare(ALL_LESSONS_SQL).all() as unknown as LessonRow[]).map(rowToLesson),
   reminders: (db.prepare(ALL_REMINDERS_SQL).all() as unknown as ReminderRow[]).map(rowToReminder),
+  payments: (db.prepare(ALL_PAYMENTS_SQL).all() as unknown as PaymentRow[]).map(rowToPayment),
 });
 const before = snapshot();
 const json = serializeBackup(before, T0);
@@ -215,6 +248,8 @@ for (const l of parsed.lessons)
   db.prepare(RESTORE_LESSON_SQL).run(l.id!, l.studentId, l.slotId, l.startMs, l.durationMin, l.amountCents, l.status, l.invoiceId, l.notes);
 for (const r of parsed.reminders)
   db.prepare(RESTORE_REMINDER_SQL).run(r.id!, r.invoiceId, r.step, r.sentMs);
+for (const p of parsed.payments)
+  db.prepare(RESTORE_PAYMENT_SQL).run(p.id!, p.invoiceId, p.amountCents, p.paidMs, p.notes);
 eq('backup restore round-trips exactly', snapshot(), before);
 
 // ---- backup format guards ----
@@ -230,7 +265,13 @@ const degraded = parseBackup(JSON.stringify({
   invoices: [{ id: 3, studentId: 99, dueMs: 5 }],
   lessons: [{ id: 4, studentId: 1, startMs: 7, slotId: 2, invoiceId: 3 }],
   reminders: [{ id: 5, invoiceId: 3, step: 'due', sentMs: 1 }],
+  payments: [{ id: 6, invoiceId: 3, amountCents: 100, paidMs: 1 }],
 }));
+eq('v1 backup with no payments parses', parseBackup(JSON.stringify({
+  format: 'lessonledger-backup', version: 1, exportedAtMs: 0,
+  students: [], slots: [], invoices: [], lessons: [], reminders: [],
+})).payments.length, 0);
+eq('payment of dropped invoice dropped too', degraded.payments.length, 0);
 eq('bad weekday slot dropped', degraded.slots.length, 0);
 eq('orphaned invoice dropped', degraded.invoices.length, 0);
 eq('lesson survives with dangling refs nulled',

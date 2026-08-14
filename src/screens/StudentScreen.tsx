@@ -580,7 +580,10 @@ function InvoicesCard(props: {
               : STATUS_LABELS[inv.status].toLowerCase()}
           </Text>
           <Text style={styles.lessonAmount}>
-            {formatMoney(inv.amountCents, props.sym)}
+            {formatMoney(
+              inv.status === 'open' ? inv.balanceCents : inv.amountCents,
+              props.sym,
+            )}
           </Text>
         </Pressable>
       ))}

@@ -287,7 +287,7 @@ export default function HomeScreen({
 
   const month = summarizeLessons(monthLessons);
   const buckets = bucketInvoices(open, now);
-  const invoicedCents = open.reduce((sum, i) => sum + i.amountCents, 0);
+  const invoicedCents = open.reduce((sum, i) => sum + i.balanceCents, 0);
   let unbilledSum = 0;
   for (const t of unbilled.values()) unbilledSum += t.totalCents;
   const owed = invoicedCents + unbilledSum;
@@ -359,7 +359,7 @@ export default function HomeScreen({
                 </Text>
               </View>
               <Text style={styles.queueAmount}>
-                {formatMoney(invoice.amountCents, sym)}
+                {formatMoney(invoice.balanceCents, sym)}
               </Text>
             </Pressable>
           ))}
@@ -402,7 +402,7 @@ export default function HomeScreen({
                       {inv.studentName}
                     </Text>
                     <Text style={styles.invoiceAmount}>
-                      {formatMoney(inv.amountCents, sym)}
+                      {formatMoney(inv.balanceCents, sym)}
                     </Text>
                   </View>
                   <Text style={styles.invoiceSub} numberOfLines={1}>

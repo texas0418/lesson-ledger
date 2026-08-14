@@ -45,7 +45,7 @@ export default function StudentsScreen({ onBack, onOpenStudent }: Props) {
   const openByStudent = useMemo(() => {
     const m = new Map<number, number>();
     for (const inv of listOpenInvoices()) {
-      m.set(inv.studentId, (m.get(inv.studentId) ?? 0) + inv.amountCents);
+      m.set(inv.studentId, (m.get(inv.studentId) ?? 0) + inv.balanceCents);
     }
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recompute alongside the list
