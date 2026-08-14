@@ -24,6 +24,8 @@ import {
   deleteStudent,
   getStudent,
   listInvoicesByStudent,
+  listLessonsBetween,
+  listLessonsByStudent,
   listSlotsByStudent,
   listUnbilledByStudent,
   updateStudent,
@@ -39,12 +41,15 @@ import {
   formatDayShort,
   formatDuration,
   formatMoney,
+  formatMonth,
   formatYmd,
   lessonAmountCents,
+  monthBounds,
   parseClock,
   parseMoneyToCents,
   parseYmd,
   slotLabel,
+  summarizeLessons,
   todayNoonMs,
 } from '../models';
 import { useSettings } from '../SettingsContext';
@@ -466,6 +471,65 @@ function UnbilledCard(props: {
   );
 }
 
+// ------------------------------------------------------------------ history
+
+function HistoryCard(props: {
+  studentId: number;
+  styles: Styles;
+  muted: string;
+  success: string;
+  sym: string;
+}) {
+  const { styles, sym } = props;
+  const [recent] = useState<Lesson[]>(() =>
+    listLessonsByStudent(props.studentId, 8),
+  );
+  const now = Date.now();
+  // Month rollup from the full month, not just the rows shown below.
+  const [month] = useState(() => {
+    const [mStart, mEnd] = monthBounds(now);
+    return summarizeLessons(
+      listLessonsBetween(mStart, mEnd).filter(
+        (l) => l.studentId === props.studentId,
+      ),
+    );
+  });
+
+  if (recent.length === 0) return null;
+  return (
+    <View style={styles.card}>
+      <Text style={styles.sectionTitle}>Lesson history</Text>
+      {month.n > 0 && (
+        <Text style={styles.hint}>
+          {formatMonth(now)}: {month.n} lesson{month.n === 1 ? '' : 's'} ·{' '}
+          {formatDuration(month.minutes)} · {formatMoney(month.cents, sym)}
+        </Text>
+      )}
+      {recent.map((l) => (
+        <View key={l.id} style={styles.lessonRow}>
+          <Text style={styles.lessonDate}>{formatDayShort(l.startMs)}</Text>
+          <Text
+            style={[
+              styles.lessonDur,
+              l.status === 'completed' && l.invoiceId != null && { color: props.success },
+            ]}
+          >
+            {l.status === 'cancelled'
+              ? 'skipped'
+              : l.invoiceId != null
+                ? 'billed'
+                : 'unbilled'}
+          </Text>
+          <Text style={styles.lessonDur}>{formatDuration(l.durationMin)}</Text>
+          <Text style={styles.lessonAmount}>
+            {l.status === 'cancelled' ? '—' : formatMoney(l.amountCents, sym)}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 // ----------------------------------------------------------------- invoices
 
 function InvoicesCard(props: {
@@ -567,6 +631,13 @@ export default function StudentScreen({ studentId, onBack, onOpenInvoice }: Prop
         success={c.success}
         muted={c.textMuted}
         onOpenInvoice={onOpenInvoice}
+      />
+      <HistoryCard
+        studentId={studentId}
+        styles={styles}
+        muted={c.textMuted}
+        success={c.success}
+        sym={settings.currencySymbol}
       />
       <ProfileCard
         student={student}
