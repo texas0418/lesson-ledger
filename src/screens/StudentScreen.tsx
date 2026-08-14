@@ -63,6 +63,7 @@ function ProfileCard(props: {
   styles: Styles;
   muted: string;
   danger: string;
+  success: string;
   sym: string;
   onSaved: (s: Student) => void;
   onDeleted: () => void;
@@ -73,6 +74,7 @@ function ProfileCard(props: {
   const [email, setEmail] = useState(student.email);
   const [rateText, setRateText] = useState((student.rateCents / 100).toFixed(2));
   const [notes, setNotes] = useState(student.notes);
+  const [savedFlash, setSavedFlash] = useState(false);
 
   const save = () => {
     const trimmed = name.trim();
@@ -95,6 +97,9 @@ function ProfileCard(props: {
     };
     updateStudent(next);
     props.onSaved(next);
+    // Popup-free confirmation: the button itself flashes "Saved".
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1600);
   };
 
   const toggleArchived = () => {
@@ -163,8 +168,11 @@ function ProfileCard(props: {
         value={notes}
         onChangeText={setNotes}
       />
-      <Pressable style={styles.primaryBtn} onPress={save}>
-        <Text style={styles.primaryBtnText}>Save</Text>
+      <Pressable
+        style={[styles.primaryBtn, savedFlash && { backgroundColor: props.success }]}
+        onPress={save}
+      >
+        <Text style={styles.primaryBtnText}>{savedFlash ? 'Saved ✓' : 'Save'}</Text>
       </Pressable>
       <View style={styles.btnRow}>
         <Pressable style={styles.btn} onPress={toggleArchived}>
@@ -584,7 +592,7 @@ function InvoicesCard(props: {
           onPress={() => props.onOpenInvoice(inv.id!)}
         >
           <Text style={styles.lessonDate} numberOfLines={1}>
-            {inv.number || formatDayShort(inv.issuedMs)}
+            issued {formatDayShort(inv.issuedMs)}
           </Text>
           <Text
             style={[
@@ -677,6 +685,7 @@ export default function StudentScreen({ studentId, onBack, onOpenInvoice }: Prop
         styles={styles}
         muted={c.textMuted}
         danger={c.danger}
+        success={c.success}
         sym={settings.currencySymbol}
         onSaved={setStudent}
         onDeleted={onBack}
@@ -703,7 +712,7 @@ const makeStyles = (c: Palette) =>
       flexShrink: 1,
       paddingHorizontal: 8,
     },
-    topLink: { color: c.textMuted, fontSize: 14, width: 44 },
+    topLink: { color: c.textMuted, fontSize: 14, minWidth: 44 },
     card: {
       backgroundColor: c.card,
       borderRadius: 14,
