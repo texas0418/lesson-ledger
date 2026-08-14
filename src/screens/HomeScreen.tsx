@@ -22,14 +22,17 @@ import {
   unbilledTotals,
 } from '../db';
 import {
+  Lesson,
   Occurrence,
   Step,
   Student,
   WEEKDAYS,
   addDays,
   bucketInvoices,
+  dayKey,
   dueShorthand,
   formatClock,
+  formatDayShort,
   formatDuration,
   formatMoney,
   formatMonth,
@@ -72,6 +75,7 @@ const dayBounds = (nowMs: number): [number, number] => {
 interface WeekDay {
   dayMs: number;
   occs: Occurrence[];
+  oneOffs: Lesson[]; // logged lessons with no slot — they count as that day's lessons too
 }
 
 /** The week strip (today + six days) and the selected day's lesson list.
@@ -87,16 +91,18 @@ function WeekSection(props: {
   onOpenStudent: (studentId: number) => void;
   onTaught: (occ: Occurrence) => void;
   onLongPress: (occ: Occurrence) => void;
+  onRemoveLesson: (l: Lesson) => void;
 }) {
   const { week, selected, styles, sym } = props;
   const day = week[selected];
+  const dayCount = day.occs.length + day.oneOffs.length;
   const isToday = selected === 0;
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <View style={[styles.dot, { backgroundColor: props.accent }]} />
         <Text style={styles.sectionTitle}>{isToday ? 'Today' : 'This week'}</Text>
-        <Text style={styles.sectionCount}>{day.occs.length}</Text>
+        <Text style={styles.sectionCount}>{dayCount}</Text>
       </View>
       <View style={styles.strip}>
         {week.map((d, i) => {
@@ -115,13 +121,15 @@ function WeekSection(props: {
                 {wd.getDate()}
               </ChromeText>
               <ChromeText style={[styles.stripCount, on && styles.stripTextOn]}>
-                {d.occs.length > 0 ? d.occs.length : '·'}
+                {d.occs.length + d.oneOffs.length > 0
+                  ? d.occs.length + d.oneOffs.length
+                  : '·'}
               </ChromeText>
             </Pressable>
           );
         })}
       </View>
-      {day.occs.length === 0 && (
+      {dayCount === 0 && (
         <Text style={styles.hint}>No lessons {isToday ? 'today' : 'this day'}.</Text>
       )}
       {day.occs.map((occ) => {
@@ -163,7 +171,35 @@ function WeekSection(props: {
           </Pressable>
         );
       })}
-      {isToday && day.occs.length > 0 && (
+      {day.oneOffs.map((l) => {
+        const student = props.byId.get(l.studentId);
+        return (
+          <Pressable
+            key={`o${l.id}`}
+            style={styles.todayRow}
+            onPress={() => props.onOpenStudent(l.studentId)}
+            onLongPress={() => props.onRemoveLesson(l)}
+          >
+            <View style={styles.todayLeft}>
+              <Text style={styles.todayName} numberOfLines={1}>
+                {student?.name ?? '?'}
+              </Text>
+              <Text style={styles.todaySub} numberOfLines={1}>
+                {formatDuration(l.durationMin)} · logged
+                {l.notes ? ` · ${l.notes}` : ''}
+              </Text>
+            </View>
+            <Text
+              style={l.status === 'completed' ? styles.loggedText : styles.skippedText}
+            >
+              {l.status === 'completed'
+                ? `✓ ${formatMoney(l.amountCents, sym)}`
+                : 'skipped'}
+            </Text>
+          </Pressable>
+        );
+      })}
+      {isToday && dayCount > 0 && (
         <Text style={styles.hint}>Long-press a lesson to skip it or undo a log.</Text>
       )}
     </View>
@@ -228,7 +264,13 @@ export default function HomeScreen({
     const anchor = todayNoonMs(now);
     return Array.from({ length: 7 }, (_, i) => {
       const dayMs = addDays(anchor, i);
-      return { dayMs, occs: occurrencesOn(slots, weekLessons, dayMs) };
+      return {
+        dayMs,
+        occs: occurrencesOn(slots, weekLessons, dayMs),
+        oneOffs: weekLessons.filter(
+          (l) => l.slotId == null && dayKey(l.startMs) === dayKey(dayMs),
+        ),
+      };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- now is the render instant
   }, [weekLessons]);
@@ -260,6 +302,24 @@ export default function HomeScreen({
       [
         { text: 'Taught', onPress: () => logOccurrence(occ, 'completed') },
         { text: 'Skipped', onPress: () => logOccurrence(occ, 'cancelled') },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  };
+
+  const removeOneOff = (l: Lesson) => {
+    Alert.alert(
+      'Remove this log?',
+      `${formatDayShort(l.startMs)} · ${formatMoney(l.amountCents, sym)} — the lesson is deleted.`,
+      [
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            deleteLesson(l.id!);
+            reload();
+          },
+        },
         { text: 'Cancel', style: 'cancel' },
       ],
     );
@@ -304,7 +364,7 @@ export default function HomeScreen({
     <ScrollView style={styles.root} contentContainerStyle={styles.scroll}>
       <StatusBar style={statusBarStyle} />
       <View style={styles.topBar}>
-        <ChromeText style={styles.appName} numberOfLines={1}>
+        <ChromeText style={styles.appName} numberOfLines={1} maxFontSizeMultiplier={1}>
           Lesson Ledger
         </ChromeText>
         <View style={styles.topActions}>
@@ -329,7 +389,7 @@ export default function HomeScreen({
         )}
       </View>
 
-      {week.some((d) => d.occs.length > 0) && (
+      {week.some((d) => d.occs.length + d.oneOffs.length > 0) && (
         <WeekSection
           week={week}
           selected={selectedDay}
@@ -341,6 +401,7 @@ export default function HomeScreen({
           onOpenStudent={onOpenStudent}
           onTaught={(occ) => logOccurrence(occ, 'completed')}
           onLongPress={(occ) => (occ.lesson ? offerUndo(occ) : offerSkip(occ))}
+          onRemoveLesson={removeOneOff}
         />
       )}
 
@@ -409,9 +470,8 @@ export default function HomeScreen({
                     </Text>
                   </View>
                   <Text style={styles.invoiceSub} numberOfLines={1}>
-                    {[inv.number, dueShorthand(inv.dueMs, now)]
-                      .filter(Boolean)
-                      .join(' · ')}
+                    {dueShorthand(inv.dueMs, now)} · issued{' '}
+                    {formatDayShort(inv.issuedMs)}
                   </Text>
                 </Pressable>
               ))}
@@ -438,8 +498,7 @@ export default function HomeScreen({
                 onPress={() => onOpenInvoice(inv.id!)}
               >
                 <Text style={styles.settledName} numberOfLines={1}>
-                  {inv.studentName}
-                  {inv.number ? ` · ${inv.number}` : ''}
+                  {inv.studentName} · {formatDayShort(inv.paidMs ?? inv.dueMs)}
                 </Text>
                 <Text
                   style={[

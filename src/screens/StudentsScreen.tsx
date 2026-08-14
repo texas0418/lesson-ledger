@@ -10,6 +10,7 @@ import { ChromeText, Text, TextInput } from '../ui';
 import {
   countActiveStudents,
   createStudent,
+  listLessonsByStudent,
   listOpenInvoices,
   listStudents,
   unbilledTotals,
@@ -42,6 +43,16 @@ export default function StudentsScreen({ onBack, onOpenStudent }: Props) {
     }
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recompute alongside the list
+  }, [students]);
+
+  // Students with any logged lesson ever — "settled up" is only earned once
+  // there's been something to settle; before that the row says so plainly.
+  const hasHistory = useMemo(() => {
+    const m = new Set<number>();
+    for (const st of students) {
+      if (st.id != null && listLessonsByStudent(st.id, 1).length > 0) m.add(st.id);
+    }
+    return m;
   }, [students]);
 
   const addStudent = () => {
@@ -129,7 +140,11 @@ export default function StudentsScreen({ onBack, onOpenStudent }: Props) {
                 {st.archived ? '  (archived)' : ''}
               </Text>
               <Text style={owed > 0 ? styles.owed : styles.owedZero}>
-                {owed > 0 ? formatMoney(owed, sym) : 'settled up'}
+                {owed > 0
+                  ? formatMoney(owed, sym)
+                  : hasHistory.has(st.id!)
+                    ? 'settled up'
+                    : 'no lessons yet'}
               </Text>
             </View>
             <Text style={styles.sub} numberOfLines={1}>
@@ -154,7 +169,7 @@ const makeStyles = (c: Palette) =>
       paddingBottom: 12,
     },
     title: { fontSize: 17, fontWeight: '600', color: c.textPrimary },
-    topLink: { color: c.textMuted, fontSize: 14, width: 44 },
+    topLink: { color: c.textMuted, fontSize: 14, minWidth: 44 },
     addRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
     addInput: {
       flex: 1,

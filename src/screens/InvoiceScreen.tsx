@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { ChromeText, Text, TextInput } from '../ui';
+import { ChromeText, DayPicker, Text, TextInput } from '../ui';
 import {
   InvoiceWithAmount,
   addPayment,
@@ -46,10 +46,8 @@ import {
   formatDayShort,
   formatDuration,
   formatMoney,
-  formatYmd,
   nextStep,
   parseMoneyToCents,
-  parseYmd,
   payerDisplayName,
   stepIndex,
 } from '../models';
@@ -155,11 +153,11 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
 
   const now = Date.now();
   const [numberText, setNumberText] = useState(invoice?.number ?? '');
-  const [issuedText, setIssuedText] = useState(
-    formatYmd(invoice?.issuedMs ?? now),
-  );
-  const [dueText, setDueText] = useState(formatYmd(invoice?.dueMs ?? now));
+  const [issuedMs, setIssuedMs] = useState(invoice?.issuedMs ?? now);
+  const [dueMs, setDueMs] = useState(invoice?.dueMs ?? now);
+  const [showCal, setShowCal] = useState<'issued' | 'due' | null>(null);
   const [notes, setNotes] = useState(invoice?.notes ?? '');
+  const [savedFlash, setSavedFlash] = useState(false);
 
   if (!invoice || !student) {
     onBack(null);
@@ -272,28 +270,21 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
 
   // ---- facts + status ----
   const saveDetails = () => {
-    const issued = parseYmd(issuedText);
-    const due = parseYmd(dueText);
-    if (issued == null || due == null) {
-      Alert.alert('Check the dates', 'Dates need to look like 2026-08-14.');
-      return;
-    }
     const next = {
       ...invoice,
       number: numberText.trim(),
-      issuedMs: issued,
-      dueMs: due,
+      issuedMs,
+      dueMs,
       notes: notes.trim(),
     };
     updateInvoice(next);
     setInvoice(next);
-    Alert.alert('Saved', 'Invoice updated.');
+    // Popup-free confirmation: the button itself flashes "Saved".
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1600);
   };
 
-  const setTerms = (days: number) => {
-    const issued = parseYmd(issuedText);
-    if (issued != null) setDueText(formatYmd(addDays(issued, days)));
-  };
+  const setTerms = (days: number) => setDueMs(addDays(issuedMs, days));
 
   const setStatus = (status: InvoiceWithAmount['status']) => {
     const paidMs = status === 'paid' ? Date.now() : null;
@@ -576,23 +567,50 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
         </View>
         <View style={styles.rowBetween}>
           <Text style={styles.label}>Issued</Text>
-          <TextInput
-            style={styles.numInput}
-            value={issuedText}
-            onChangeText={setIssuedText}
-          />
+          <Pressable
+            style={styles.dateField}
+            onPress={() => setShowCal((s) => (s === 'issued' ? null : 'issued'))}
+          >
+            <Text style={styles.dateFieldText}>{formatDayLong(issuedMs)}</Text>
+          </Pressable>
         </View>
+        {showCal === 'issued' && (
+          <DayPicker
+            valueMs={issuedMs}
+            onChange={(ms) => {
+              setIssuedMs(ms);
+              setShowCal(null);
+            }}
+            palette={c}
+          />
+        )}
         <View style={styles.rowBetween}>
           <Text style={styles.label}>Due</Text>
-          <TextInput style={styles.numInput} value={dueText} onChangeText={setDueText} />
+          <Pressable
+            style={styles.dateField}
+            onPress={() => setShowCal((s) => (s === 'due' ? null : 'due'))}
+          >
+            <Text style={styles.dateFieldText}>{formatDayLong(dueMs)}</Text>
+          </Pressable>
         </View>
+        {showCal === 'due' && (
+          <DayPicker
+            valueMs={dueMs}
+            onChange={(ms) => {
+              setDueMs(ms);
+              setShowCal(null);
+            }}
+            palette={c}
+          />
+        )}
         <View style={styles.chipRow}>
           {TERM_CHIPS.map((d) => (
             <Pressable key={d} style={styles.chip} onPress={() => setTerms(d)}>
-              <Text style={styles.chipText}>net {d}</Text>
+              <ChromeText style={styles.chipText}>net {d}</ChromeText>
             </Pressable>
           ))}
         </View>
+        <Text style={styles.hint}>net = days after the issued date.</Text>
         <TextInput
           style={[styles.input, styles.notesInput]}
           placeholder="Notes (appear on the PDF)"
@@ -601,8 +619,13 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
           onChangeText={setNotes}
           multiline
         />
-        <Pressable style={styles.primaryBtn} onPress={saveDetails}>
-          <Text style={styles.primaryBtnText}>Save changes</Text>
+        <Pressable
+          style={[styles.primaryBtn, savedFlash && { backgroundColor: c.success }]}
+          onPress={saveDetails}
+        >
+          <Text style={styles.primaryBtnText}>
+            {savedFlash ? 'Saved ✓' : 'Save changes'}
+          </Text>
         </Pressable>
       </View>
 
@@ -680,7 +703,7 @@ const makeStyles = (c: Palette) =>
       paddingBottom: 12,
     },
     title: { fontSize: 17, fontWeight: '600', color: c.textPrimary },
-    topLink: { color: c.textMuted, fontSize: 14, width: 44 },
+    topLink: { color: c.textMuted, fontSize: 14, minWidth: 44 },
     card: {
       backgroundColor: c.card,
       borderRadius: 14,
@@ -815,6 +838,17 @@ const makeStyles = (c: Palette) =>
       borderBottomWidth: 1,
       borderBottomColor: c.hairline,
     },
+    dateField: {
+      backgroundColor: c.bg,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: c.cardBorder,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      minWidth: 140,
+      alignItems: 'flex-end',
+    },
+    dateFieldText: { fontSize: 15, color: c.textPrimary },
     unbilledHead: {
       fontSize: 12,
       color: c.textMuted,
