@@ -154,7 +154,7 @@ const makeStyles = (c: Palette) =>
       paddingBottom: 12,
     },
     title: { fontSize: 17, fontWeight: '600', color: c.textPrimary },
-    topLink: { color: c.textMuted, fontSize: 14, width: 44 },
+    topLink: { color: c.textMuted, fontSize: 14, minWidth: 44 },
     addRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
     addInput: {
       flex: 1,
