@@ -24,6 +24,8 @@ import {
   Occurrence,
   Step,
   Student,
+  WEEKDAYS,
+  addDays,
   bucketInvoices,
   dueShorthand,
   formatClock,
@@ -35,6 +37,7 @@ import {
   nextStep,
   occurrencesOn,
   summarizeLessons,
+  todayNoonMs,
 } from '../models';
 import { useSettings } from '../SettingsContext';
 import { Palette, Urgency, useTheme } from '../theme';
@@ -65,6 +68,107 @@ const dayBounds = (nowMs: number): [number, number] => {
   return [start, start + 86400000];
 };
 
+interface WeekDay {
+  dayMs: number;
+  occs: Occurrence[];
+}
+
+/** The week strip (today + six days) and the selected day's lesson list.
+ *  Only today is loggable; future days are read-only plan. */
+function WeekSection(props: {
+  week: WeekDay[];
+  selected: number;
+  onSelect: (i: number) => void;
+  byId: Map<number, Student>;
+  sym: string;
+  styles: ReturnType<typeof makeStyles>;
+  accent: string;
+  onOpenStudent: (studentId: number) => void;
+  onTaught: (occ: Occurrence) => void;
+  onLongPress: (occ: Occurrence) => void;
+}) {
+  const { week, selected, styles, sym } = props;
+  const day = week[selected];
+  const isToday = selected === 0;
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <View style={[styles.dot, { backgroundColor: props.accent }]} />
+        <Text style={styles.sectionTitle}>{isToday ? 'Today' : 'This week'}</Text>
+        <Text style={styles.sectionCount}>{day.occs.length}</Text>
+      </View>
+      <View style={styles.strip}>
+        {week.map((d, i) => {
+          const on = i === selected;
+          const wd = new Date(d.dayMs);
+          return (
+            <Pressable
+              key={d.dayMs}
+              style={[styles.stripChip, on && styles.stripChipOn]}
+              onPress={() => props.onSelect(i)}
+            >
+              <Text style={[styles.stripDay, on && styles.stripTextOn]}>
+                {WEEKDAYS[wd.getDay()]}
+              </Text>
+              <Text style={[styles.stripDate, on && styles.stripTextOn]}>
+                {wd.getDate()}
+              </Text>
+              <Text style={[styles.stripCount, on && styles.stripTextOn]}>
+                {d.occs.length > 0 ? d.occs.length : '·'}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {day.occs.length === 0 && (
+        <Text style={styles.hint}>No lessons {isToday ? 'today' : 'this day'}.</Text>
+      )}
+      {day.occs.map((occ) => {
+        const student = props.byId.get(occ.slot.studentId);
+        const logged = occ.lesson;
+        return (
+          <Pressable
+            key={occ.slot.id}
+            style={styles.todayRow}
+            onPress={() => props.onOpenStudent(occ.slot.studentId)}
+            onLongPress={isToday ? () => props.onLongPress(occ) : undefined}
+          >
+            <View style={styles.todayLeft}>
+              <Text style={styles.todayName} numberOfLines={1}>
+                {student?.name ?? '?'}
+              </Text>
+              <Text style={styles.todaySub} numberOfLines={1}>
+                {formatClock(occ.slot.startMin)} ·{' '}
+                {formatDuration(occ.slot.durationMin)}
+              </Text>
+            </View>
+            {logged ? (
+              <Text
+                style={
+                  logged.status === 'completed'
+                    ? styles.loggedText
+                    : styles.skippedText
+                }
+              >
+                {logged.status === 'completed'
+                  ? `✓ ${formatMoney(logged.amountCents, sym)}`
+                  : 'skipped'}
+              </Text>
+            ) : isToday ? (
+              <Pressable style={styles.taughtBtn} onPress={() => props.onTaught(occ)}>
+                <Text style={styles.taughtBtnText}>Taught</Text>
+              </Pressable>
+            ) : null}
+          </Pressable>
+        );
+      })}
+      {isToday && day.occs.length > 0 && (
+        <Text style={styles.hint}>Long-press a lesson to skip it or undo a log.</Text>
+      )}
+    </View>
+  );
+}
+
 export default function HomeScreen({
   onOpenInvoice,
   onOpenStudent,
@@ -76,14 +180,19 @@ export default function HomeScreen({
   const styles = useMemo(() => makeStyles(c), [c]);
 
   const now = Date.now();
-  const [bounds] = useState<[number, number]>(() => dayBounds(now));
+  // The schedule window: today through six days out (the week strip).
+  const [bounds] = useState<[number, number]>(() => [
+    dayBounds(now)[0],
+    dayBounds(addDays(now, 6))[1],
+  ]);
   const [students] = useState<Student[]>(() => listStudents());
   const [open, setOpen] = useState<InvoiceWithStudent[]>(() => listOpenInvoices());
   const [settled] = useState<InvoiceWithStudent[]>(() => listSettledInvoices(5));
   const [sentByInvoice] = useState(() => sentStepsByOpenInvoice());
-  const [todayLessons, setTodayLessons] = useState(() =>
+  const [weekLessons, setWeekLessons] = useState(() =>
     listLessonsBetween(bounds[0], bounds[1]),
   );
+  const [selectedDay, setSelectedDay] = useState(0); // 0 = today … 6
   const [monthLessons, setMonthLessons] = useState(() =>
     listLessonsBetween(...monthBounds(now)),
   );
@@ -99,7 +208,7 @@ export default function HomeScreen({
 
   const reload = useCallback(() => {
     setOpen(listOpenInvoices());
-    setTodayLessons(listLessonsBetween(bounds[0], bounds[1]));
+    setWeekLessons(listLessonsBetween(bounds[0], bounds[1]));
     setMonthLessons(listLessonsBetween(...monthBounds(Date.now())));
     setUnbilled(unbilledTotals());
   }, [bounds]);
@@ -112,11 +221,16 @@ export default function HomeScreen({
       return next;
     });
 
-  const today = useMemo(
-    () => occurrencesOn(listActiveSlots(), todayLessons, now),
+  // One entry per strip day: its noon anchor and computed occurrences.
+  const week = useMemo(() => {
+    const slots = listActiveSlots();
+    const anchor = todayNoonMs(now);
+    return Array.from({ length: 7 }, (_, i) => {
+      const dayMs = addDays(anchor, i);
+      return { dayMs, occs: occurrencesOn(slots, weekLessons, dayMs) };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- now is the render instant
-    [todayLessons],
-  );
+  }, [weekLessons]);
 
   const logOccurrence = (occ: Occurrence, status: 'completed' | 'cancelled') => {
     const student = byId.get(occ.slot.studentId);
@@ -212,59 +326,19 @@ export default function HomeScreen({
         )}
       </View>
 
-      {today.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={[styles.dot, { backgroundColor: c.accent }]} />
-            <Text style={styles.sectionTitle}>Today</Text>
-            <Text style={styles.sectionCount}>{today.length}</Text>
-          </View>
-          {today.map((occ) => {
-            const student = byId.get(occ.slot.studentId);
-            const logged = occ.lesson;
-            return (
-              <Pressable
-                key={occ.slot.id}
-                style={styles.todayRow}
-                onPress={() => onOpenStudent(occ.slot.studentId)}
-                onLongPress={() => (logged ? offerUndo(occ) : offerSkip(occ))}
-              >
-                <View style={styles.todayLeft}>
-                  <Text style={styles.todayName} numberOfLines={1}>
-                    {student?.name ?? '?'}
-                  </Text>
-                  <Text style={styles.todaySub} numberOfLines={1}>
-                    {formatClock(occ.slot.startMin)} ·{' '}
-                    {formatDuration(occ.slot.durationMin)}
-                  </Text>
-                </View>
-                {logged ? (
-                  <Text
-                    style={
-                      logged.status === 'completed'
-                        ? styles.loggedText
-                        : styles.skippedText
-                    }
-                  >
-                    {logged.status === 'completed'
-                      ? `✓ ${formatMoney(logged.amountCents, sym)}`
-                      : 'skipped'}
-                  </Text>
-                ) : (
-                  <Pressable
-                    style={styles.taughtBtn}
-                    onPress={() => logOccurrence(occ, 'completed')}
-                  >
-                    <Text style={styles.taughtBtnText}>Taught</Text>
-                  </Pressable>
-                )}
-              </Pressable>
-            );
-          })}
-          <Text style={styles.hint}>
-            Long-press a lesson to skip it or undo a log.
-          </Text>
-        </View>
+      {week.some((d) => d.occs.length > 0) && (
+        <WeekSection
+          week={week}
+          selected={selectedDay}
+          onSelect={setSelectedDay}
+          byId={byId}
+          sym={sym}
+          styles={styles}
+          accent={c.accent}
+          onOpenStudent={onOpenStudent}
+          onTaught={(occ) => logOccurrence(occ, 'completed')}
+          onLongPress={(occ) => (occ.lesson ? offerUndo(occ) : offerSkip(occ))}
+        />
       )}
 
       {queue.length > 0 && (
@@ -406,6 +480,21 @@ const makeStyles = (c: Palette) =>
     },
     totalLabel: { fontSize: 12, color: c.textMuted, textTransform: 'uppercase' },
     totalValue: { fontSize: 28, fontWeight: '700', color: c.textPrimary, marginTop: 2 },
+    strip: { flexDirection: 'row', gap: 5, marginBottom: 10 },
+    stripChip: {
+      flex: 1,
+      alignItems: 'center',
+      backgroundColor: c.card,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: c.cardBorder,
+      paddingVertical: 7,
+    },
+    stripChipOn: { backgroundColor: c.accent, borderColor: c.accent },
+    stripDay: { fontSize: 11, color: c.textMuted },
+    stripDate: { fontSize: 15, fontWeight: '600', color: c.textPrimary, marginTop: 1 },
+    stripCount: { fontSize: 11, color: c.textMuted, marginTop: 1 },
+    stripTextOn: { color: c.accentText },
     monthLine: {
       fontSize: 13,
       color: c.textBody,
