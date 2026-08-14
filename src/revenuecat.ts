@@ -22,11 +22,11 @@
 // monthly + annual packages.
 
 // Public SDK keys (safe to ship in the app bundle — these are NOT secret).
-export const RC_API_KEY_IOS = 'REPLACE_WITH_RC_IOS_KEY'; // starts with "appl_"
+export const RC_API_KEY_IOS = 'appl_ThAQWUVpUYHOmSxaJHMKqvoVNUX'; // RC project ec6e7f51
 export const RC_API_KEY_ANDROID = 'REPLACE_WITH_RC_ANDROID_KEY'; // starts with "goog_"
 
-// The entitlement that grants Pro. Confirm on the RC Entitlements page after
-// project creation — see the Billowe trap note above.
+// The entitlement that grants Pro. CONFIRMED on the RC Entitlements page
+// 2026-08-14 by Simon during setup: identifier is exactly `pro` (lowercase).
 export const ENTITLEMENT_ID = 'pro';
 
 // App Store Connect auto-renewable subscription product ids. Must match ASC
