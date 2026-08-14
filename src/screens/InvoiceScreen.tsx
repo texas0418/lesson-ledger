@@ -348,7 +348,10 @@ export default function InvoiceScreen({ invoiceId, onBack }: Props) {
           <Text style={styles.sectionTitle}>Lessons on this invoice</Text>
           {lessons.map((l) => (
             <View key={l.id} style={styles.lessonRow}>
-              <Text style={styles.lessonDate}>{formatDayShort(l.startMs)}</Text>
+              <Text style={styles.lessonDate} numberOfLines={1}>
+                {formatDayShort(l.startMs)}
+                {l.notes ? ` · ${l.notes}` : ''}
+              </Text>
               <Text style={styles.lessonDur}>{formatDuration(l.durationMin)}</Text>
               <Text style={styles.lessonAmount}>
                 {formatMoney(l.amountCents, sym)}
