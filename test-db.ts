@@ -7,7 +7,7 @@ import {
   ALL_SLOTS_SQL,
   ALL_STUDENTS_SQL, ATTACH_LESSON_SQL, COUNT_ACTIVE_STUDENTS_SQL,
   DELETE_ALL_STUDENTS_SQL, DELETE_INVOICE_SQL, DELETE_PAYMENT_SQL,
-  DELETE_SLOT_SQL,
+  DELETE_SLOT_SQL, DETACH_LESSON_SQL,
   DELETE_STUDENT_SQL, DETACH_LESSONS_SQL, ENABLE_FK_SQL, GET_INVOICE_SQL,
   GET_STUDENT_SQL, INSERT_INVOICE_SQL, INSERT_LESSON_SQL,
   INSERT_PAYMENT_SQL,
@@ -195,9 +195,22 @@ eq('deleted invoice cascades reminders',
 eq('deleted invoice cascades payments',
   (db.prepare(ALL_PAYMENTS_SQL).all() as unknown as PaymentRow[]).length, 0);
 
-// ---- detach-all (manual unbundle path) ----
+// ---- detach one (edit-invoice path) ----
 const inv2Id = Number(db.prepare(INSERT_INVOICE_SQL).run(...invoiceToParams(inv)).lastInsertRowid);
 db.prepare(ATTACH_LESSON_SQL).run(inv2Id, l1);
+db.prepare(ATTACH_LESSON_SQL).run(inv2Id, l2);
+db.prepare(DETACH_LESSON_SQL).run(l1);
+eq('single detach leaves the rest attached',
+  (db.prepare(LIST_LESSONS_BY_INVOICE_SQL).all(inv2Id) as unknown as LessonRow[]).map((l) => l.id),
+  [l2]);
+eq('detached lesson is unbilled again',
+  (db.prepare(LIST_UNBILLED_BY_STUDENT_SQL).all(mayaId) as unknown as LessonRow[]).map((l) => l.id),
+  [l1]);
+eq('amount re-derives after single detach',
+  (db.prepare(GET_INVOICE_SQL).get(inv2Id) as unknown as InvoiceAmountRow).amount_cents,
+  5000);
+
+// ---- detach-all (manual unbundle path) ----
 db.prepare(DETACH_LESSONS_SQL).run(inv2Id);
 eq('detach empties the invoice',
   (db.prepare(LIST_LESSONS_BY_INVOICE_SQL).all(inv2Id) as unknown as LessonRow[]).length, 0);

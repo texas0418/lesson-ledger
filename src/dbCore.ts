@@ -323,6 +323,7 @@ export const LIST_LESSONS_BY_STUDENT_SQL = `SELECT * FROM lessons
   WHERE student_id = ? ORDER BY start_ms DESC, id DESC LIMIT ?`;
 
 export const ATTACH_LESSON_SQL = `UPDATE lessons SET invoice_id = ? WHERE id = ? AND status = 'completed'`;
+export const DETACH_LESSON_SQL = `UPDATE lessons SET invoice_id = NULL WHERE id = ?`;
 export const DETACH_LESSONS_SQL = `UPDATE lessons SET invoice_id = NULL WHERE invoice_id = ?`;
 
 export interface UnbilledTotalRow {
