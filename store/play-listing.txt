@@ -1,0 +1,62 @@
+LESSON LEDGER — GOOGLE PLAY STORE LISTING (draft 2026-08-15)
+==============================================================
+
+APP NAME (30 chars max)
+Lesson Ledger: Tutor Invoices
+
+SHORT DESCRIPTION (80 chars max)
+Students, lessons, unbilled balances, and 2-tap invoices — built for tutors.
+
+FULL DESCRIPTION (4000 chars max)
+-----------------------------------------------------
+You teach. You reschedule. You track who's paid, who hasn't, and whose parent needs a gentle nudge. Lesson Ledger takes everything after the teaching off your plate.
+
+BUILT FOR HOW TUTORING ACTUALLY WORKS
+• Students with their rates, subjects, and parents' contact details
+• A weekly schedule that logs lessons as they happen
+• Every logged lesson accrues to an unbilled balance per student — you always know exactly who owes what
+
+INVOICES IN TWO TAPS
+Turn a student's unbilled lessons into a clean, professional PDF invoice and send it through any app you like. Dates, lessons, amounts, totals — done before your next student rings the doorbell.
+
+POLITE REMINDERS THAT WORK
+When an invoice sits unpaid, Lesson Ledger drafts the courteous follow-up message for you — timed right, worded professionally, sent from your own account with one tap. No more composing awkward texts to parents at 10 pm.
+
+YOUR BUSINESS STAYS YOURS
+Everything lives on your phone: no account, no cloud, no analytics. Students' information never leaves your device unless you send it. Export a backup any time — backups are free forever.
+
+FIRST STUDENT FREE, FOREVER
+Every feature included with your first student, free, for as long as you like. Lesson Ledger Pro ($4.99/month or $49.99/year) unlocks unlimited students when your roster grows.
+
+Private tutors, music teachers, coaches, test-prep instructors — if you invoice by the lesson, this ledger was ruled for you.
+-----------------------------------------------------
+
+CATEGORY: Business (or Education — match iOS when set)
+PRIVACY POLICY URL: https://texas0418.github.io/LessonLedger/privacy.html
+  *** ACTION NEEDED (Simon, one click): repo Settings → Pages → Deploy from branch → main, /docs.
+  *** The policy file is docs/privacy.html in this PR. URL 404s until Pages is enabled AND the PR is promoted to main.
+
+GRAPHIC ASSETS (store/)
+- play-icon-512.png — DONE
+- play-feature-graphic.png (1024x500) — DONE
+- screenshots-android/ — captured this run from release APK
+
+DATA SAFETY FORM (prep)
+- Local-first, no network calls; nothing collected or shared
+- Purchase history via Google Play Billing/RevenueCat for the Pro subscription — collected, not shared, app functionality
+- Student records: on-device only, never transmitted — NOT collected under Play's definitions
+
+CONTENT RATING: Everyone
+
+SUBSCRIPTION (extra Play Console steps vs one-time IAPs)
+- Products: lessonledger_pro_monthly $4.99/mo, lessonledger_pro_yearly $49.99/yr (mirror iOS ids/pricing)
+- Play Console → Monetize → Subscriptions: create ONE subscription with two base plans (monthly, yearly) — Play's model differs from ASC's two products
+- RevenueCat: add Google to the project, service-account JSON credentials, map both base plans into the existing entitlement
+- Fail-open house rule applies: app fully works with placeholder keys
+
+ANDROID QA NOTES
+- Emulator smoke this run: students/schedule/balances/invoice screens
+- Physical-device check before submission: expo-print invoice PDF formatting (same WebView caveat as Inkwell's export)
+
+RELEASE NOTES (first release)
+Lesson Ledger arrives on Android: students, schedules, unbilled balances, two-tap PDF invoices, and polite payment reminders — everything on your phone, nothing in a cloud.

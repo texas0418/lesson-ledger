@@ -38,7 +38,8 @@
           }
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "./plugins/withReleaseSigning.js"
     ]
   }
 }
