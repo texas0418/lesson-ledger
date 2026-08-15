@@ -10,7 +10,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false,
-      "buildNumber": "1",
+      "buildNumber": "2",
       "bundleIdentifier": "com.simonshih.lessonledger",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
