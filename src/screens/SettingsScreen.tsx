@@ -31,6 +31,38 @@ interface Props {
   onBack: () => void;
 }
 
+// Apple guideline 3.1.2(c): an app selling auto-renewable subscriptions must
+// show, IN THE APP's purchase flow, the subscription title, its length, its
+// price (and price per unit), plus functional links to the privacy policy and
+// the Terms of Use. Metadata links alone are not enough — that's what the
+// 2026-08-16 rejection was about. PLANS is the single source for that block.
+export const TERMS_URL =
+  'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
+export const PRIVACY_URL = 'https://simonbuilds.app/lessonledger/privacy.html';
+
+const PLANS: {
+  term: ProTerm;
+  title: string;
+  length: string;
+  price: string;
+  perUnit: string;
+}[] = [
+  {
+    term: 'yearly',
+    title: 'Lesson Ledger Pro — Yearly',
+    length: '1 year',
+    price: '$49.99',
+    perUnit: '$4.17 per month, billed yearly',
+  },
+  {
+    term: 'monthly',
+    title: 'Lesson Ledger Pro — Monthly',
+    length: '1 month',
+    price: '$4.99',
+    perUnit: '$4.99 per month',
+  },
+];
+
 const THEME_CHOICES: { mode: ThemeMode; label: string }[] = [
   { mode: 'system', label: 'System' },
   { mode: 'light', label: 'Light' },
@@ -109,6 +141,11 @@ export default function SettingsScreen({ onBack }: Props) {
         Alert.alert(ok ? 'Restored' : 'Nothing to restore', ok ? 'Pro is active.' : undefined),
       )
       .catch((e) => Alert.alert('Restore failed', String(e?.message ?? e)));
+
+  const openUrl = (url: string) =>
+    Linking.openURL(url).catch(() =>
+      Alert.alert('Could not open the link', url),
+    );
 
   const manageSub = () =>
     Linking.openURL('https://apps.apple.com/account/subscriptions').catch(() => {});
@@ -252,20 +289,42 @@ export default function SettingsScreen({ onBack }: Props) {
           <>
             <Text style={styles.hint}>
               Your first student is free, every feature included. Pro unlocks
-              unlimited students. Auto-renews; cancel anytime in your App Store
+              unlimited students.
+            </Text>
+            {PLANS.map((p) => (
+              <Pressable
+                key={p.term}
+                style={p.term === 'yearly' ? styles.planCardHot : styles.planCard}
+                onPress={() => buyPro(p.term)}
+              >
+                <Text style={styles.planTitle}>{p.title}</Text>
+                <Text style={styles.planPrice}>
+                  {p.price} / {p.length}
+                </Text>
+                <Text style={styles.planPerUnit}>{p.perUnit}</Text>
+              </Pressable>
+            ))}
+            <Text style={styles.hint}>
+              Payment is charged to your Apple Account at confirmation. The
+              subscription renews automatically for the same price and period
+              unless it is cancelled at least 24 hours before the end of the
+              current period. Manage or cancel it in your App Store account
               settings.
             </Text>
-            <Pressable style={styles.primaryBtn} onPress={() => buyPro('yearly')}>
-              <Text style={styles.primaryBtnText}>$49.99 / year (2 months free)</Text>
-            </Pressable>
-            <Pressable style={styles.btn} onPress={() => buyPro('monthly')}>
-              <Text style={styles.btnText}>$4.99 / month</Text>
-            </Pressable>
           </>
         )}
         <Pressable style={styles.btn} onPress={restore}>
           <Text style={styles.btnText}>Restore purchases</Text>
         </Pressable>
+        <View style={styles.legalRow}>
+          <Pressable onPress={() => openUrl(TERMS_URL)} hitSlop={8}>
+            <Text style={styles.legalLink}>Terms of Use (EULA)</Text>
+          </Pressable>
+          <Text style={styles.legalDot}>·</Text>
+          <Pressable onPress={() => openUrl(PRIVACY_URL)} hitSlop={8}>
+            <Text style={styles.legalLink}>Privacy Policy</Text>
+          </Pressable>
+        </View>
       </View>
     </ScrollView>
   );
@@ -312,6 +371,35 @@ const makeStyles = (c: Palette) =>
       marginTop: 8,
     },
     multiline: { minHeight: 64, textAlignVertical: 'top' },
+    planCard: {
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: c.cardBorder,
+      backgroundColor: c.bg,
+      padding: 14,
+      marginTop: 10,
+    },
+    planCardHot: {
+      borderRadius: 12,
+      borderWidth: 2,
+      borderColor: c.accent,
+      backgroundColor: c.bg,
+      padding: 14,
+      marginTop: 10,
+    },
+    planTitle: { fontSize: 15, fontWeight: '600', color: c.textPrimary },
+    planPrice: { fontSize: 20, fontWeight: '700', color: c.textPrimary, marginTop: 4 },
+    planPerUnit: { fontSize: 13, color: c.textMuted, marginTop: 2 },
+    legalRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      marginTop: 14,
+    },
+    legalLink: { fontSize: 13, color: c.accent, textDecorationLine: 'underline' },
+    legalDot: { fontSize: 13, color: c.textMuted },
     numInput: {
       backgroundColor: c.bg,
       borderRadius: 10,

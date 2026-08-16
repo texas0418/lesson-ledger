@@ -10,7 +10,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false,
-      "buildNumber": "2",
+      "buildNumber": "3",
       "bundleIdentifier": "com.simonshih.lessonledger",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -38,7 +38,8 @@
           }
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "./plugins/withReleaseSigning.js"
     ]
   }
 }
