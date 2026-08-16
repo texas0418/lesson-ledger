@@ -32,9 +32,8 @@ Private tutors, music teachers, coaches, test-prep instructors — if you invoic
 -----------------------------------------------------
 
 CATEGORY: Business (or Education — match iOS when set)
-PRIVACY POLICY URL: https://texas0418.github.io/LessonLedger/privacy.html
-  *** ACTION NEEDED (Simon, one click): repo Settings → Pages → Deploy from branch → main, /docs.
-  *** The policy file is docs/privacy.html in this PR. URL 404s until Pages is enabled AND the PR is promoted to main.
+PRIVACY POLICY URL (real, verified live 2026-08-16): https://simonbuilds.app/lessonledger/privacy.html
+
 
 GRAPHIC ASSETS (store/)
 - play-icon-512.png — DONE
