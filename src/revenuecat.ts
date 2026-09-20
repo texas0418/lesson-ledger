@@ -23,7 +23,7 @@
 
 // Public SDK keys (safe to ship in the app bundle — these are NOT secret).
 export const RC_API_KEY_IOS = 'appl_ThAQWUVpUYHOmSxaJHMKqvoVNUX'; // RC project ec6e7f51
-export const RC_API_KEY_ANDROID = 'REPLACE_WITH_RC_ANDROID_KEY'; // starts with "goog_"
+export const RC_API_KEY_ANDROID = 'goog_mViTjxcBeTHobPFbLFHevuGYXNX'; // starts with "goog_"
 
 // The entitlement that grants Pro. CONFIRMED on the RC Entitlements page
 // 2026-08-14 by Simon during setup: identifier is exactly `pro` (lowercase).
