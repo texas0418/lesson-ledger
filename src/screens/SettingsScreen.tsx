@@ -26,6 +26,7 @@ import {
   useProAccess,
 } from '../proAccess';
 import { Palette, useTheme } from '../theme';
+import MoreApps from '../components/MoreApps';
 
 interface Props {
   onBack: () => void;
@@ -325,6 +326,8 @@ export default function SettingsScreen({ onBack }: Props) {
             <Text style={styles.legalLink}>Privacy Policy</Text>
           </Pressable>
         </View>
+
+        <MoreApps />
       </View>
     </ScrollView>
   );
