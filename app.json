@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lesson Ledger",
     "slug": "lesson-ledger",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "lessonledger",
@@ -10,7 +10,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false,
-      "buildNumber": "3",
+      "buildNumber": "4",
       "bundleIdentifier": "com.simonshih.lessonledger",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -22,7 +22,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#2e3a8c"
-      }
+      },
+      "versionCode": 2
     },
     "plugins": [
       "expo-asset",
@@ -39,7 +40,8 @@
         }
       ],
       "expo-sharing",
-      "./plugins/withReleaseSigning.js"
+      "./plugins/withReleaseSigning.js",
+      "expo-sqlite"
     ]
   }
 }
